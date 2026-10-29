@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { solveTwoBone, solveLimbRotations, projectPoint } from './math';
-import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, FINGER_PART_NAMES, DIGITS, type Digit, type Side, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
+import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, FINGER_PART_NAMES, DIGITS, type Digit, type Side, type HandValues, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
 import { CURRENT_MODEL } from './rig';
 import {JOINT_LIMITS,constrainJointRotation,decomposeJointRotation,solveSpineTarget} from './poseControls';
 import {FlyCameraControls,perspectiveForNavigation,cloneExportCamera} from './FlyCameraControls';
@@ -14,6 +14,7 @@ import {COCO_LINKS,COCO_COLORS,HAND_LINKS,handBones,projectPose,paintSkeleton,wo
 import {depthRangeFor,dataMaterial,type DepthRange,type RenderKind,type DataKind} from './renderPasses';
 import {defaultCameraSettings,captureCamera,restoreCamera,validOutputSize,type CameraSettings} from './cameraState';
 import {validateReferenceImage,referenceWithSettings,type ReferenceImage,type ReferenceSettings} from './referenceImage';
+import {HAND_GESTURES,validHandValues,normalizedHandValues,writeHandValues,handShapeValid} from './handGestures';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
@@ -464,13 +465,8 @@ export class PoseEngine {
     this.solvePins();this.keepPinnedPose(baseline);this.syncTargets();this.update(false);this.syncGizmo();this.commit();
   }
   private applyHandShape(side:'Left'|'Right',shape:string){
-    this.hands[side]=shape;
-    for(const digit of DIGITS)for(let i=1;i<=3;i++){
-      const bone=this.bones[`${side}${digit}${i}`];if(!bone)continue;
-      bone.quaternion.fromArray(this.rest.joints[bone.name].quaternion);
-      const curl=shape==='握拳'?(digit==='Thumb'?.45:1.0):shape==='指向'?(digit==='Index'?0:.95):0;
-      bone.quaternion.copy(fingerRotation(digit,i,curl,0,fingerAxes(this.rest.joints,side,digit,i,this.profile.handCurlNormalSign)));
-    }
+    const gesture=HAND_GESTURES.find(g=>g.name===shape);if(!gesture)return;
+    this.hands[side]=shape;writeHandValues(this.bones,this.rest.joints,side,gesture.values,this.profile.handCurlNormalSign);
   }
   private markCustomHand(name:string){const digit=fingerPart(name);if(digit)this.hands[digit[1] as Side]='自定义';}
   setFinger(side:Side,digit:Digit,joint:number,value:number,kind:'curl'|'spread',commit=true){
@@ -498,10 +494,15 @@ export class PoseEngine {
   }
   private readForearm(side:Side){if(!this.rest)return 0;const name=`${side}ForeArm`;return THREE.MathUtils.radToDeg(forearmAngles(this.bones[name].quaternion,this.hingeAxis(name),new V().fromArray(this.rest.joints[`${side}Hand`].position)).twist);}
   setHand(side:'Left'|'Right',shape:string){
-    if(!this.rest)return;
-    this.applyHandShape(side,shape);
-    this.update(true);this.commit();
+    const gesture=HAND_GESTURES.find(g=>g.name===shape);if(gesture)this.applyHandGesture(side,gesture.values,gesture.name);
   }
+  captureHand(side:Side){const values=this.readHand(side);if(side==='Right')for(const d of DIGITS)values[d].spread*=-1;return normalizedHandValues(values);}
+  applyHandGesture(side:Side,values:HandValues,label='自定义'){
+    if(!this.rest||!validHandValues(values))throw new Error('手势指骨角度无效');
+    writeHandValues(this.bones,this.rest.joints,side,values,this.profile.handCurlNormalSign);this.hands[side]=handShapeValid(label)?label:'自定义';
+    this.update(false);this.syncGizmo();this.commit();
+  }
+  copyHand(source:Side){const target=source==='Left'?'Right':'Left';this.applyHandGesture(target,this.captureHand(source),this.hands[source]);}
   resetSelected(){const rest=this.rest.joints[this.selected];if(!rest)return;const baseline=this.snapshot();this.bones[this.selected].quaternion.fromArray(rest.quaternion);this.bones[this.selected].position.fromArray(rest.position);this.markCustomHand(this.selected);delete this.pins[this.selected as Effector];this.bones[this.selected].updateWorldMatrix(false,true);this.solvePins();this.keepPinnedPose(baseline);this.syncTargets();this.update(true);this.syncGizmo();this.commit();}
 
   applyPreset(preset:Preset,commit=true){

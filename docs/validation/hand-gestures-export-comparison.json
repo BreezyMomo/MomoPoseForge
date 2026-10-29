@@ -1,0 +1,51 @@
+{
+  "views": 1,
+  "width": 1024,
+  "height": 1024,
+  "vGesture": "V 手势",
+  "fistGesture": "握拳",
+  "cameraIdentical": true,
+  "bodyKeypointsIdentical": true,
+  "rightHandKeypointsIdentical": true,
+  "leftHandKeypointsChanged": true,
+  "changedJoints": [
+    "LeftIndex1",
+    "LeftIndex2",
+    "LeftIndex3",
+    "LeftMiddle1",
+    "LeftMiddle2",
+    "LeftMiddle3"
+  ],
+  "images": {
+    "current/mannequin.png": {
+      "changed": true,
+      "vSha256": "7ad2b1076e4cc656ee555fd786e4bedeec32bfb23b12954f74ef814bf9f8042a",
+      "fistSha256": "18f8b9fdbe2be8aa5f6b69d9dd6315616b3c783e5afd0836dc4bfc0d18122ca7"
+    },
+    "current/openpose-coco18.png": {
+      "changed": false,
+      "vSha256": "7a0b8247b595a3e6db9eaeada9443321d278256a27fedada01605bb5bf9f6d16",
+      "fistSha256": "7a0b8247b595a3e6db9eaeada9443321d278256a27fedada01605bb5bf9f6d16"
+    },
+    "current/openpose-body-hands.png": {
+      "changed": true,
+      "vSha256": "92499800f7aa52c327d16badf319e16743b52a4eebc5c22eee6f41580e33a82e",
+      "fistSha256": "a43f6312530181c97a5065c36fef9b01bac04509d288275fb5d1f708b389eda8"
+    },
+    "current/depth.png": {
+      "changed": true,
+      "vSha256": "2029b1d9e455961702c1fc91b1b32645fe718acc17090899b68120969f8f23aa",
+      "fistSha256": "afa9b00f075cd8bae91dc97174d202dc554edf2e270c0ebf7deb7b28848b809b"
+    },
+    "current/normal.png": {
+      "changed": true,
+      "vSha256": "ac78ad5abf6e3f13e4ec78483a0c8893641eaafcad06189b7848c6ff4386fe57",
+      "fistSha256": "6676d09ed00418f08897f6e84bf1290483c491fe3e31f782741180ff8dfb1adf"
+    },
+    "current/mask.png": {
+      "changed": true,
+      "vSha256": "51dd5d66ab76a87e4f62dacf048fb4eb4c643df946a6249f78224404de70d7fb",
+      "fistSha256": "41e83e9321089954c6412efba42c044b169d49db91d4a8920d78eadddc82a33c"
+    }
+  }
+}

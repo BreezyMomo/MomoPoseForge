@@ -1,0 +1,73 @@
+{
+  "thumbnailSnapshotIdentical": true,
+  "leftApplicationChangedJoints": [
+    "LeftThumb1",
+    "LeftThumb3",
+    "LeftIndex1",
+    "LeftMiddle1",
+    "LeftRing1",
+    "LeftRing2",
+    "LeftRing3",
+    "LeftLittle1",
+    "LeftLittle2",
+    "LeftLittle3"
+  ],
+  "rightCopyChangedJoints": [
+    "RightLittle1",
+    "RightLittle2",
+    "RightLittle3",
+    "RightRing1",
+    "RightRing2",
+    "RightRing3",
+    "RightMiddle1",
+    "RightIndex1",
+    "RightThumb1",
+    "RightThumb3"
+  ],
+  "applicationNonPoseStateIdentical": true,
+  "copyNonPoseStateIdentical": true,
+  "undoMaximumQuaternionDifference": 2.220446049250313e-16,
+  "undoReferenceIdentical": true,
+  "labels": {
+    "Left": "V 手势",
+    "Right": "V 手势"
+  },
+  "copySourceHandIdentical": true,
+  "customLibraryRefreshRestored": true,
+  "customLibraryImportRestored": true,
+  "customLibraryRemoveUndoRestored": true,
+  "invalidLibraryRejectedWithoutLosingSavedGesture": true,
+  "responsive": [
+    {
+      "closeTabTop": 123,
+      "height": 900,
+      "scrollHeight": 900,
+      "scrollWidth": 1440,
+      "width": 1440
+    },
+    {
+      "closeButton": {
+        "bottom": 139.5,
+        "height": 18,
+        "left": 331,
+        "right": 359,
+        "top": 121.5,
+        "width": 28,
+        "x": 331,
+        "y": 121.5
+      },
+      "height": 844,
+      "panelWidth": 278,
+      "scrollHeight": 844,
+      "scrollWidth": 390,
+      "width": 390
+    },
+    {
+      "height": 1024,
+      "panelWidth": 278,
+      "scrollHeight": 1024,
+      "scrollWidth": 768,
+      "width": 768
+    }
+  ]
+}

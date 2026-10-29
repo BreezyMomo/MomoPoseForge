@@ -1,0 +1,22 @@
+{
+  "verification": "web/scripts/verify-export.mjs and web/scripts/verify-control-maps.mjs",
+  "vGesture": {
+    "archive": "hand-gestures-v.zip", "views": 1, "files": 16, "width": 1024, "height": 1024,
+    "keypointMaximumErrorPixels": 0.000023345205136138247,
+    "surfaceSamples": 114,
+    "maximumDepthByteError": 0.5118499616211523,
+    "maximumNormalByteError": 0.5424277040724519,
+    "maximumHandProjectionErrorPixels": 0.00044567879945134337,
+    "maximumWorldErrorMetres": 0,
+    "handVisibilityMismatches": 0
+  },
+  "fist": {
+    "archive": "hand-gestures-fist.zip", "views": 1, "width": 1024, "height": 1024,
+    "surfaceSamples": 111,
+    "maximumDepthByteError": 0.5426575353722285,
+    "maximumNormalByteError": 0.5554805156810687,
+    "maximumHandProjectionErrorPixels": 0.00044567879945134337,
+    "maximumWorldErrorMetres": 0,
+    "handVisibilityMismatches": 0
+  }
+}

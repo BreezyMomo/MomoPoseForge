@@ -1,0 +1,53 @@
+{
+  "format": "momo-pose-forge-hand-library",
+  "version": 1,
+  "rig": "mixamo-xbot-v2",
+  "gestures": [
+    {
+      "id": "a06b7e86-0a7d-4831-a5c1-96582afd6476",
+      "name": "杯柄预备（验收）",
+      "values": {
+        "Thumb": {
+          "curl": [
+            1,
+            6,
+            3
+          ],
+          "spread": -27
+        },
+        "Index": {
+          "curl": [
+            30,
+            47,
+            25
+          ],
+          "spread": 14
+        },
+        "Middle": {
+          "curl": [
+            45,
+            60,
+            35
+          ],
+          "spread": 0
+        },
+        "Ring": {
+          "curl": [
+            55,
+            70,
+            45
+          ],
+          "spread": 0
+        },
+        "Little": {
+          "curl": [
+            60,
+            75,
+            50
+          ],
+          "spread": 0
+        }
+      }
+    }
+  ]
+}
