@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.taste-skill/
+.openai/sites/
+*.log
+.env*
+!**/.env.example
+artifacts/
