@@ -5,6 +5,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { solveTwoBone, solveLimbRotations, projectPoint } from './math';
 import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
 import { CURRENT_MODEL } from './rig';
+import {JOINT_LIMITS,constrainJointRotation,solveSpineTarget} from './poseControls';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
@@ -75,9 +76,9 @@ export class PoseEngine {
     this.camera.position.set(2.6,1.65,4.5);
     this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbit.target.copy(this.center);
-    this.orbit.enableDamping = true;
+    this.orbit.enableDamping = false;
     this.orbit.minDistance = .5; this.orbit.maxDistance = 12;
-    this.orbit.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+    this.orbit.mouseButtons = { LEFT: undefined, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
     this.orbit.addEventListener('start', () => { this.view = 'free'; if(this.ready)this.onInfo(this.info()); });
     this.scene.add(new THREE.HemisphereLight('#ffffff', '#757575', 2));
     const key = new THREE.DirectionalLight('#fff9ef', 3.4);
@@ -101,7 +102,7 @@ export class PoseEngine {
       if (event.value) { this.dragBefore = this.snapshot(); this.cancelPending = false; }
       else if (this.dragBefore) {
         if (this.cancelPending) this.apply(this.dragBefore);
-        this.dragBefore = null; this.update(true); if (!this.cancelPending) this.commit();
+        this.dragBefore = null; this.syncTargets(); this.syncGizmo(); this.update(false); if (!this.cancelPending) this.commit();
       }
     });
     this.transform.addEventListener('objectChange', () => { if (!this.suppress && this.ready) this.manipulate(); });
@@ -161,6 +162,14 @@ export class PoseEngine {
     bone.quaternion.setFromAxisAngle(axis,angle);bone.updateWorldMatrix(false,true);
   }
 
+  private limitJoint(name:string){
+    this.limitHinge(name);
+    if(!JOINT_LIMITS[name]||!this.rest)return;
+    const bone=this.bones[name],limited=constrainJointRotation(name,bone.quaternion,new Q().fromArray(this.rest.joints[name].quaternion));
+    if(bone.quaternion.angleTo(limited)>1e-5)this.warning=`${PART_NAMES[name]}已到角度范围边界`;
+    bone.quaternion.copy(limited);bone.updateWorldMatrix(false,true);
+  }
+
   solve(end: string, target: THREE.Vector3, pole?: THREE.Vector3, preserveEndOrientation=true) {
     const chain = CHAINS[end]; if (!chain) return;
     const [a,b,c] = chain;
@@ -184,10 +193,13 @@ export class PoseEngine {
 
   private manipulate() {
     this.warning = '';
+    // TransformControls already computes from pointer-down. Match that baseline
+    // for the skeleton too, rather than accumulating a different solve per event.
+    if(this.dragBefore)this.apply(this.dragBefore,false);
     const bone = this.bones[this.selected]; if (!bone) return;
     if (this.mode === 'rotate') {
       this.setWorldQuaternion(bone,this.gizmo.quaternion);
-      this.limitHinge(this.selected);
+      this.limitJoint(this.selected);
       if (this.pins[this.selected as Effector]) {
         this.pins[this.selected as Effector]!.quaternion = this.gizmo.quaternion.toArray();
       }
@@ -201,20 +213,14 @@ export class PoseEngine {
       bone.position.copy(bone.parent!.worldToLocal(this.gizmo.position.clone()));
       bone.updateWorldMatrix(false,true);
     } else if (this.selected === 'Chest') {
-      // Multi-joint spine target; each iteration obeys a small local swing envelope.
-      for (let step=0;step<8;step++) for (const name of ['Spine1','Spine']) {
-        const joint = this.bones[name], p = this.world(name);
-        const from = this.world('Chest').sub(p).normalize(), to = this.gizmo.position.clone().sub(p).normalize();
-        this.setWorldQuaternion(joint,new Q().setFromUnitVectors(from,to).multiply(joint.getWorldQuaternion(new Q())));
-        const e = new THREE.Euler().setFromQuaternion(joint.quaternion,'XYZ');
-        e.x=THREE.MathUtils.clamp(e.x,-.7,.9); e.z=THREE.MathUtils.clamp(e.z,-.5,.5);
-        joint.quaternion.setFromEuler(e); joint.updateWorldMatrix(false,true);
-      }
+      const error=solveSpineTarget(this.bones,this.gizmo.position,this.rest.joints);
+      if(error>.01)this.warning='胸腔目标已到可达范围边界';
     } else {
       const end = Object.keys(CHAINS).find(k => CHAINS[k][1] === this.selected);
       if (end) { this.poles[end] = asVec(this.gizmo.position); this.solve(end,new V().fromArray(this.targets[end])); }
     }
     this.solvePins();
+    this.syncTargets();
     this.update(false);
   }
 
@@ -229,8 +235,8 @@ export class PoseEngine {
 
   select(name: string) {
     if(!this.bones[name])return;
-    this.selected=name;
-    if(!this.canTranslate(name))this.setMode('rotate');
+    this.selected=name;this.warning='';
+    this.setMode(this.canTranslate(name)?'translate':'rotate');
     this.syncGizmo(); this.transform.attach(this.gizmo); this.update(false);
   }
   canTranslate(name=this.selected){return !!CHAINS[name]||name==='Hips'||name==='Chest'||Object.values(CHAINS).some(c=>c[1]===name);}
@@ -264,8 +270,8 @@ export class PoseEngine {
     if(!Number.isFinite(value))return;
     const bone=this.bones[this.selected],e=new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ');
     const a=e.toArray() as [number,number,number,THREE.EulerOrder];a[axis]=THREE.MathUtils.degToRad(THREE.MathUtils.clamp(value,-180,180));
-    bone.quaternion.setFromEuler(new THREE.Euler(a[0],a[1],a[2],'XYZ'));bone.updateWorldMatrix(false,true);this.limitHinge(this.selected);
-    this.warning='';this.solvePins();this.syncTargets();this.update(true);this.syncGizmo();this.commit();
+    this.warning='';bone.quaternion.setFromEuler(new THREE.Euler(a[0],a[1],a[2],'XYZ'));bone.updateWorldMatrix(false,true);this.limitJoint(this.selected);
+    this.solvePins();this.syncTargets();this.update(false);this.syncGizmo();this.commit();
   }
   private applyHandShape(side:'Left'|'Right',shape:string){
     this.hands[side]=shape;
@@ -294,6 +300,9 @@ export class PoseEngine {
     this.bones.Hips.position.y-=preset.drop??0;
     this.bones.Spine.quaternion.setFromEuler(new THREE.Euler(preset.lean??0,preset.twist??0,0));
     this.bones.Head.quaternion.setFromEuler(new THREE.Euler(0,preset.head??0,0));
+    // Spread a preset's body turn across the spine instead of exceeding one joint.
+    if(preset.twist){for(const name of ['Spine','Spine1','Chest'])this.bones[name].quaternion.setFromEuler(new THREE.Euler(name==='Spine'?preset.lean??0:0,preset.twist/3,0));}
+    for(const name of Object.keys(JOINT_LIMITS))this.limitJoint(name);
     this.model.updateMatrixWorld(true);
     const defaults:Record<Effector,Vec3>={LeftHand:[.235,.93,.02],RightHand:[-.235,.93,.02],LeftFoot:[.14,this.rest.targets.LeftFoot[1],0],RightFoot:[-.14,this.rest.targets.RightFoot[1],0]};
     for(const end of END_EFFECTORS){
@@ -345,13 +354,14 @@ export class PoseEngine {
     return structuredClone({format:'momo-pose-forge',version:1,rig:CURRENT_MODEL.rig,name:this.name,root:{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,views:this.views,ground:this.ground}) as PoseDocument;
   }
   apply(doc:PoseDocument,update=true){
-    this.suppress=true;this.name=doc.name;this.views=structuredClone(doc.views);this.ground=doc.ground;
+    this.suppress=true;this.warning='';this.name=doc.name;this.views=structuredClone(doc.views);this.ground=doc.ground;
     this.model.position.fromArray(doc.root.position);this.model.quaternion.fromArray(doc.root.quaternion);
     for(const[name,j]of Object.entries(doc.joints)){const b=this.bones[name];if(b){b.position.fromArray(j.position);b.quaternion.fromArray(j.quaternion);}}
+    if(this.rest)for(const name of Object.keys(JOINT_LIMITS))this.limitJoint(name);
     this.targets=structuredClone(doc.targets);this.poles=structuredClone(doc.poles);this.pins=structuredClone(doc.pins);this.hands={...doc.hands};
-    this.model.updateMatrixWorld(true);this.suppress=false;if(update){this.warning='';this.update(true);this.syncGizmo();}
+    this.model.updateMatrixWorld(true);this.suppress=false;if(update){this.update(true);this.syncGizmo();}
   }
-  commit(){if(!this.ready)return;this.onInfo(this.info());this.onCommit(this.snapshot());}
+  commit(){if(!this.ready)return;this.fit(false);this.onInfo(this.info());this.onCommit(this.snapshot());}
 
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
@@ -360,7 +370,7 @@ export class PoseEngine {
 
   private update(fit:boolean){
     if(!this.ready)return;this.model.updateMatrixWorld(true);
-    if(fit)this.fit();
+    if(fit)this.fit(false);
     for(const h of this.handles){const name=h.userData.part as string;h.position.copy(this.world(name));h.visible=this.moreControls||END_EFFECTORS.includes(name as Effector);const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.3:1);}
     if(this.display==='skeleton')this.updateSkeletonDisplay();
     this.onInfo(this.info());
@@ -372,14 +382,14 @@ export class PoseEngine {
     pts.forEach((p,i)=>{const s=new THREE.Mesh(new THREE.SphereGeometry(.012,8,8),new THREE.MeshBasicMaterial({color:COCO_COLORS[i]}));s.position.copy(p);this.boneDisplay.add(s);});
   }
 
-  fit(){
+  fit(updateCamera=true){
     this.model.traverse(o=>{if(o instanceof THREE.SkinnedMesh){o.skeleton.update();o.computeBoundingBox();}});
     const box=new THREE.Box3().setFromObject(this.model,true);if(box.isEmpty())return;
     box.getCenter(this.center);
     let maxY=0,maxX=0;
     for(const slot of this.views){const cam=this.viewCamera(slot,1);cam.updateMatrixWorld();const inv=cam.matrixWorldInverse;for(let i=0;i<8;i++){const p=new V(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z).applyMatrix4(inv);maxX=Math.max(maxX,Math.abs(p.x));maxY=Math.max(maxY,Math.abs(p.y));}}
     this.span=Math.max(maxY*2,maxX*2/.75)*1.18;
-    if(this.camera instanceof THREE.OrthographicCamera){const aspect=this.host.clientWidth/Math.max(1,this.host.clientHeight);this.camera.top=this.span/2;this.camera.bottom=-this.span/2;this.camera.left=-this.span*aspect/2;this.camera.right=this.span*aspect/2;this.camera.updateProjectionMatrix();}
+    if(updateCamera&&this.camera instanceof THREE.OrthographicCamera){const aspect=this.host.clientWidth/Math.max(1,this.host.clientHeight);this.camera.top=this.span/2;this.camera.bottom=-this.span/2;this.camera.left=-this.span*aspect/2;this.camera.right=this.span*aspect/2;this.camera.updateProjectionMatrix();}
   }
   viewCamera(slot:ViewSlot,aspect=.75){
     const half=this.span/2,cam=new THREE.OrthographicCamera(-half*aspect,half*aspect,half,-half,.01,50);

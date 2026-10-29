@@ -13,4 +13,5 @@ npm run dev
 
 - [产品设计](docs/product-design-v1.md)
 - [实现与验证说明](docs/implementation-v0.1.md)
+- [同类工具与控制器参考](docs/reference-tools-and-controls.md)
 - [人体资产来源](web/public/models/XBOT-ASSET.md)

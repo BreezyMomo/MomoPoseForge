@@ -14,3 +14,4 @@ dialog{background:#1a1e18;color:var(--text);border:1px solid #485041;border-radi
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 .view-label h1{font-size:12px;font-weight:400;line-height:1.4}.panel-heading h2{font-size:15px;font-weight:600}
+.icon-button.with-label{width:auto;padding:0 7px;gap:5px;font-size:11px;flex-shrink:0}.control-help{margin-top:12px;margin-bottom:0;min-height:38px}

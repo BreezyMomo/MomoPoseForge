@@ -304,6 +304,8 @@ Three.js 还提供 CCDIKSolver，但其接口面向 SkinnedMesh；本产品采�
 
 # 17 参考项目
 
+同类工具的能力、来源、核对状态与逐项参考顺序，见[同类工具与控制器参考](reference-tools-and-controls.md)。当前先参考 PoseMy.Art 与 JustSketchMe 完善控制分工和脊柱约束，再对照 Fullbody Pose Maker 评估全身 IK；随后参考 SetPose、Posegeni、Poseify 和 3D OpenPose Editor 的控制及导出流程。
+
 [AI Pose Gallery 中文版](https://github.com/anhao/ai-pose-gallery-zh) 为分类检索和多角度查看提供产品参考；本项目自行生成可编辑预设和渲染图，不导入该图库素材。
 
 [UniMate](https://github.com/Friedrich-M/UniMate) 为未来多种骨骼和文字生成动作提供方向参考。首版不接入其模型、权重或数据，AI 生成不属于当前依赖。
