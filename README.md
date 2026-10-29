@@ -27,6 +27,8 @@ npm run dev
 
 AI 控制图：导出面板可预览各通道，选择“使用 AI 控制图全套”生成对应 PNG、双手各 21 点和可复现工作流。ZIP 内附本地运行脚本，网站无需连接推理服务。[使用方法、实际生成对照和验证记录](docs/ai-export-workflow.md)。
 
+道具与人体允许重叠，由用户通过位置、尺寸、旋转和人体关节自行调整；不自动修改椅子或人体来消除穿模。
+
 - [产品设计](docs/product-design-v1.md)
 - [实现与验证说明](docs/implementation-v0.1.md)
 - [同类工具与控制器参考](docs/reference-tools-and-controls.md)

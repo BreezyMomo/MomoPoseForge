@@ -24,7 +24,7 @@ export function PropsPanel({engine,info,onNotify}:{engine:PoseEngine|null;info:E
     </section>
     {prop&&<>
       <section className="inspector-section props-panel"><div className="section-label"><h2>{PROP_KINDS[prop.kind]}设置</h2><span>米 / 度</span></div>
-        <p className="field-help">位置以底面中心为准；椅子高度指坐面高度。</p>
+        <p className="field-help">位置以底面中心为准；椅子高度指坐面高度。与人体重叠时，可手动调整位置、高度和深度。</p>
         <div className="prop-fields">{['X','Y','Z'].map((axis,i)=><PropNumber key={`position-${prop.id}-${i}`} label={`位置 ${axis}`} value={prop.position[i]} min={-5} max={5} onChange={v=>vector('position',i,v)}/>)}</div>
         <div className="prop-fields">{['宽度','高度','深度'].map((axis,i)=><PropNumber key={`size-${prop.id}-${i}`} label={axis} value={prop.size[i]} min={.02} max={3} onChange={v=>vector('size',i,v)}/>)}</div>
         <PropNumber key={`yaw-${prop.id}`} label="水平旋转" value={prop.yaw} min={-180} max={180} step={5} onChange={v=>change({yaw:v})}/>
