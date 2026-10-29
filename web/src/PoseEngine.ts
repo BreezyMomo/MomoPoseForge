@@ -12,6 +12,7 @@ import {LIMB_LIMITS,constrainLimb,limbAxes} from './limbLimits';
 import {LOCAL_AXES,solveConstrainedIK,captureJoints,restoreJoints,interpolateJoints,goalError,type PositionGoal,type SolverJoint} from './fullBodyIK';
 import {COCO_LINKS,COCO_COLORS,HAND_LINKS,handBones,projectPose,paintSkeleton,worldSkeleton,depthVisibility,type OpenPoseFrame} from './poseOutput';
 import {depthRangeFor,dataMaterial,type DepthRange,type RenderKind,type DataKind} from './renderPasses';
+import {defaultCameraSettings,captureCamera,restoreCamera,validOutputSize,type CameraSettings} from './cameraState';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
@@ -55,6 +56,7 @@ export class PoseEngine {
   handDetail:Side|null=null;
   center = new V(0,.85,0);
   span = 1.98;
+  cameraState=defaultCameraSettings();
   vertexCount = 0;
   disposed = false;
   private resizeObserver: ResizeObserver;
@@ -68,9 +70,9 @@ export class PoseEngine {
   private cancelPending = false;
   private profile: { id?:string; headAnchors?: Record<string, number[]>; hingeAxes?:Record<string,number[]>; handCurlNormalSign?:number } = {};
   onInfo: (info: EngineInfo) => void;
-  onCommit: (document: PoseDocument) => void;
+  onCommit: (document: PoseDocument,history?:boolean) => void;
 
-  constructor(public host: HTMLDivElement, onInfo: (info: EngineInfo) => void, onCommit: (document: PoseDocument) => void) {
+  constructor(public host: HTMLDivElement, onInfo: (info: EngineInfo) => void, onCommit: (document: PoseDocument,history?:boolean) => void) {
     this.onInfo = onInfo; this.onCommit = onCommit;
     this.scene.background = new THREE.Color('#202121');
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -89,8 +91,10 @@ export class PoseEngine {
     this.orbit.target.copy(this.center);
     this.orbit.enableDamping = false;
     this.orbit.minDistance = .5; this.orbit.maxDistance = 12;
+    this.orbit.minZoom=.1;this.orbit.maxZoom=20;
     this.orbit.mouseButtons = { LEFT: undefined, MIDDLE: THREE.MOUSE.PAN, RIGHT: undefined };
     this.orbit.addEventListener('start', () => { this.view = 'free'; if(this.ready)this.onInfo(this.info()); });
+    this.orbit.addEventListener('end',()=>this.commitCamera());
     this.scene.add(new THREE.HemisphereLight('#ffffff', '#757575', 2));
     const key = new THREE.DirectionalLight('#fff9ef', 3.4);
     key.position.set(2.5,4,4); key.castShadow = true;
@@ -109,7 +113,7 @@ export class PoseEngine {
     this.transform.setSpace('world');
     this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', (event) => {
-      this.orbit.enabled = !event.value;
+      this.orbit.enabled = !event.value&&!this.cameraState.locked;
       if (event.value) { this.dragBefore = this.snapshot(); this.cancelPending = false; }
       else if (this.dragBefore) {
         if (this.cancelPending) this.apply(this.dragBefore);
@@ -120,11 +124,11 @@ export class PoseEngine {
     this.renderer.domElement.addEventListener('pointerdown', this.pointerDown);
     this.fly=new FlyCameraControls(this.renderer.domElement,()=>this.camera,()=>this.syncNavigationTarget(),active=>{
       if(active){
-        if(this.transform.dragging)return false;
-        if(this.camera instanceof THREE.OrthographicCamera){this.camera=perspectiveForNavigation(this.camera,this.orbit.target);this.orbit.object=this.camera;this.transform.camera=this.camera;}
+        if(this.transform.dragging||this.cameraState.locked)return false;
+        if(this.camera instanceof THREE.OrthographicCamera){this.camera=perspectiveForNavigation(this.camera,this.orbit.target,this.cameraState.fov);this.orbit.object=this.camera;this.transform.camera=this.camera;}
         this.navigationDistance=this.camera.position.distanceTo(this.orbit.target);
         this.orbit.enabled=false;this.transform.enabled=false;this.view='free';
-      }else{this.syncNavigationTarget();this.transform.enabled=true;this.orbit.enabled=!this.transform.dragging;}
+      }else{this.syncNavigationTarget();this.transform.enabled=true;this.orbit.enabled=!this.transform.dragging&&!this.cameraState.locked;this.commitCamera();}
       if(this.ready)this.onInfo(this.info());
     });
     this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(this.host);
@@ -408,11 +412,11 @@ export class PoseEngine {
   setMore(value:boolean){this.moreControls=value;this.update(false);}
   setHandDetail(side:Side|null){const previous=this.handDetail;this.handDetail=side;if(side)this.select(`${side}Index1`);else if(fingerPart(this.selected)&&previous)this.select(`${previous}Hand`);this.update(false);}
   focusHand(side:Side){
-    if(!this.bones[`${side}Hand`])return;
+    if(!this.bones[`${side}Hand`]||this.cameraState?.locked)return;
     this.fly?.stop();const center=this.world(`${side}Hand`);for(const digit of DIGITS)center.add(this.world(`${side}${digit}2`));center.divideScalar(6);
     const direction=this.camera.position.clone().sub(this.orbit.target).normalize();this.view='free';
-    this.camera=new THREE.PerspectiveCamera(35,this.host.clientWidth/Math.max(1,this.host.clientHeight),.01,100);
-    this.camera.position.copy(center).addScaledVector(direction,.52);this.camera.lookAt(center);this.orbit.object=this.camera;this.orbit.target.copy(center);this.transform.camera=this.camera;this.orbit.update();this.onInfo(this.info());
+    this.camera=new THREE.PerspectiveCamera(this.cameraState.fov,this.host.clientWidth/Math.max(1,this.host.clientHeight),.01,100);
+    this.camera.position.copy(center).addScaledVector(direction,.52);this.camera.lookAt(center);this.orbit.object=this.camera;this.orbit.target.copy(center);this.transform.camera=this.camera;this.orbit.update();this.commitCamera();
   }
   setDisplay(mode:'surface'|'skeleton'){this.display=mode;this.model.visible=mode==='surface';this.boneDisplay.visible=mode==='skeleton';this.update(false);}
   setGrid(value:boolean){this.grid.visible=value;}
@@ -489,7 +493,7 @@ export class PoseEngine {
 
   applyPreset(preset:Preset,commit=true){
     const views=this.views,name=this.name,fullBody=this.fullBody;
-    this.apply(this.rest,false);this.views=views;this.fullBody=fullBody;this.name=commit?preset.name:name;
+    this.apply(this.rest,false,false);this.views=views;this.fullBody=fullBody;this.name=commit?preset.name:name;
     this.pins={};this.ground=preset.ground??true;this.warning='';
     this.bones.Hips.position.y-=preset.drop??0;
     this.bones.Spine.quaternion.setFromEuler(new THREE.Euler(preset.lean??0,preset.twist??0,0));
@@ -545,22 +549,25 @@ export class PoseEngine {
   private syncTargets(){this.model.updateMatrixWorld(true);for(const end of END_EFFECTORS)this.targets[end]=asVec(this.world(end));}
   snapshot():PoseDocument{
     const joints:PoseDocument['joints']={};for(const[name,b]of Object.entries(this.bones))joints[name]={position:b.position.toArray(),quaternion:b.quaternion.toArray()};
-    return structuredClone({format:'momo-pose-forge',version:1,rig:CURRENT_MODEL.rig,name:this.name,root:{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,views:this.views,ground:this.ground,fullBody:this.fullBody}) as PoseDocument;
+    return structuredClone({format:'momo-pose-forge',version:1,rig:CURRENT_MODEL.rig,name:this.name,root:{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,views:this.views,ground:this.ground,fullBody:this.fullBody,...(this.camera?{camera:this.getCameraSettings()}: {})}) as PoseDocument;
   }
-  apply(doc:PoseDocument,update=true){
-    this.suppress=true;this.warning='';this.name=doc.name;this.views=structuredClone(doc.views);this.ground=doc.ground;
+  apply(doc:PoseDocument,update=true,restoreView=true){
+    this.suppress=true;this.fly?.stop();this.warning='';this.name=doc.name;this.ground=doc.ground;
+    if(restoreView){this.views=structuredClone(doc.views);this.cameraState=structuredClone(doc.camera??defaultCameraSettings());}
     this.fullBody=doc.fullBody??true;
     this.model.position.fromArray(doc.root.position);this.model.quaternion.fromArray(doc.root.quaternion);
     for(const[name,j]of Object.entries(doc.joints)){const b=this.bones[name];if(b){b.position.fromArray(j.position);b.quaternion.fromArray(j.quaternion);}}
     if(this.rest)for(const name of [...Object.keys(JOINT_LIMITS),...Object.keys(LIMB_LIMITS),...Object.keys(FINGER_PART_NAMES),'LeftForeArm','RightForeArm','LeftLeg','RightLeg','LeftToeBase','RightToeBase'])this.limitJoint(name);
     this.targets=structuredClone(doc.targets);this.poles=structuredClone(doc.poles);this.pins=structuredClone(doc.pins);this.hands={...doc.hands};
-    this.model.updateMatrixWorld(true);this.suppress=false;if(update){this.update(true);this.syncGizmo();}
+    this.model.updateMatrixWorld(true);this.suppress=false;
+    if(update){this.update(true);this.syncGizmo();}
+    if(restoreView&&this.camera&&this.orbit){if(doc.camera)this.restoreObservation(doc.camera.active,doc.camera.view);else this.setView('free',false);this.orbit.enabled=!this.cameraState.locked;if(update&&this.ready)this.onInfo(this.info());}
   }
   commit(){if(!this.ready)return;this.fit(false);this.onInfo(this.info());this.onCommit(this.snapshot());}
 
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
-    return {ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),warning:this.warning,hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount};
+    return {ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),warning:this.warning,hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
   }
 
   private update(fit:boolean){
@@ -578,13 +585,61 @@ export class PoseEngine {
     for(const side of ['Left','Right'] as const){const points=this.handWorld(side);for(const[a,b]of HAND_LINKS){const geometry=new THREE.BufferGeometry().setFromPoints([points[a],points[b]]);this.boneDisplay.add(new THREE.Line(geometry,new THREE.LineBasicMaterial({color:'#d8bb77'})));}}
   }
 
-  fit(updateCamera=true){
+  getCameraSettings():CameraSettings{
+    const state=structuredClone(this.cameraState??defaultCameraSettings());
+    if(this.camera&&this.orbit){state.active=captureCamera(this.camera,this.orbit.target,state.fov);state.view=this.view;}
+    state.framing.center=this.center?.toArray()??state.framing.center;state.framing.verticalSpan=this.span??state.framing.verticalSpan;
+    return state;
+  }
+  private restoreObservation(pose:CameraSettings['active'],view='free'){
+    this.fly?.stop();this.camera=restoreCamera(pose,this.host.clientWidth/Math.max(1,this.host.clientHeight));this.view=view;
+    this.orbit.object=this.camera;this.orbit.target.fromArray(pose.target);this.transform.camera=this.camera;this.orbit.update();
+  }
+  private commitCamera(){
+    if(!this.ready||this.suppress)return;this.cameraState=this.getCameraSettings();this.onInfo(this.info());this.onCommit(this.snapshot(),false);
+  }
+  setCameraLock(locked:boolean){this.fly?.stop();this.cameraState.locked=locked;this.orbit.enabled=!locked&&!this.transform.dragging;this.commitCamera();}
+  setFramingLock(locked:boolean){if(!locked)this.cameraState.framing.locked=false;this.fit(false);this.cameraState.framing={locked,center:asVec(this.center),verticalSpan:this.span};if(!this.cameraState.locked&&this.view!=='free')this.setView(this.view,false);this.commitCamera();}
+  reframe(){this.fit(false,true);this.cameraState.framing.center=asVec(this.center);this.cameraState.framing.verticalSpan=this.span;if(!this.cameraState.locked&&this.view!=='free')this.setView(this.view,false);this.commitCamera();}
+  setOutputSize(width:number,height:number){
+    if(!validOutputSize(width,height))return false;this.cameraState.output={width,height};this.fit(false);
+    if(!this.cameraState.locked&&this.view!=='free')this.setView(this.view,false);this.commitCamera();return true;
+  }
+  renameView(id:string,name:string){const slot=this.views.find(v=>v.id===id);if(!slot||!name.trim()||name.length>30)return;slot.name=name.trim();this.commitCamera();}
+  setFov(fov:number){
+    if(this.cameraState.locked||!Number.isFinite(fov))return;this.fly?.stop();this.cameraState.fov=THREE.MathUtils.clamp(fov,15,100);
+    if(this.camera instanceof THREE.PerspectiveCamera){this.camera.fov=this.cameraState.fov;this.camera.updateProjectionMatrix();}this.commitCamera();
+  }
+  setProjection(projection:'perspective'|'orthographic'){
+    if(this.cameraState.locked)return;this.fly?.stop();
+    if(projection==='perspective'&&this.camera instanceof THREE.OrthographicCamera){this.camera=perspectiveForNavigation(this.camera,this.orbit.target,this.cameraState.fov);this.orbit.object=this.camera;this.transform.camera=this.camera;}
+    else if(projection==='orthographic'&&this.camera instanceof THREE.PerspectiveCamera){const pose=captureCamera(this.camera,this.orbit.target,this.cameraState.fov);pose.projection='orthographic';pose.verticalSpan=2*this.camera.position.distanceTo(this.orbit.target)*Math.tan(THREE.MathUtils.degToRad(this.camera.fov)/2)/this.camera.zoom;pose.zoom=1;this.restoreObservation(pose);}
+    this.view='free';this.commitCamera();
+  }
+  saveCameraBookmark(name:string){
+    if(!name.trim()||name.length>30)return false;const existing=this.cameraState.bookmarks.find(b=>b.name===name.trim());
+    if(!existing&&this.cameraState.bookmarks.length>=12)return false;
+    const camera=captureCamera(this.camera,this.orbit.target,this.cameraState.fov);
+    if(existing)existing.camera=camera;else this.cameraState.bookmarks.push({id:crypto.randomUUID(),name:name.trim(),camera});this.commitCamera();return true;
+  }
+  loadCameraBookmark(id:string){const bookmark=this.cameraState.bookmarks.find(b=>b.id===id);if(!bookmark||this.cameraState.locked)return;this.cameraState.fov=bookmark.camera.fov;this.restoreObservation(bookmark.camera);this.commitCamera();}
+  renameCameraBookmark(id:string,name:string){const bookmark=this.cameraState.bookmarks.find(b=>b.id===id);if(!bookmark||!name.trim()||name.length>30||this.cameraState.bookmarks.some(b=>b.id!==id&&b.name===name.trim()))return false;bookmark.name=name.trim();this.commitCamera();return true;}
+  removeCameraBookmark(id:string){this.cameraState.bookmarks=this.cameraState.bookmarks.filter(b=>b.id!==id);this.commitCamera();}
+  framingWarning(){
+    if(!this.cameraState?.framing.locked)return '';const box=new THREE.Box3().setFromObject(this.model,true),aspect=this.cameraState.output.width/this.cameraState.output.height;
+    const clipped=this.views.filter(slot=>{const camera=this.viewCamera(slot,aspect);for(let i=0;i<8;i++){const point=new V(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z).project(camera);if(Math.abs(point.x)>1||Math.abs(point.y)>1||Math.abs(point.z)>1)return true;}return false;});
+    return clipped.length?`${clipped.map(v=>v.name).join('、')}可能超出画幅` : '';
+  }
+  fit(updateCamera=true,force=false){
+    this.cameraState??=defaultCameraSettings();
+    if(this.cameraState.framing.locked&&!force){this.center.fromArray(this.cameraState.framing.center);this.span=this.cameraState.framing.verticalSpan;return;}
+    this.model.updateMatrixWorld(true);
     this.model.traverse(o=>{if(o instanceof THREE.SkinnedMesh){o.skeleton.update();o.computeBoundingBox();}});
     const box=new THREE.Box3().setFromObject(this.model,true);if(box.isEmpty())return;
     box.getCenter(this.center);
     let maxY=0,maxX=0;
     for(const slot of this.views){const cam=this.viewCamera(slot,1);cam.updateMatrixWorld();const inv=cam.matrixWorldInverse;for(let i=0;i<8;i++){const p=new V(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z).applyMatrix4(inv);maxX=Math.max(maxX,Math.abs(p.x));maxY=Math.max(maxY,Math.abs(p.y));}}
-    this.span=Math.max(maxY*2,maxX*2/.75)*1.18;
+    this.span=Math.max(maxY*2,maxX*2/(this.cameraState.output.width/this.cameraState.output.height))*1.18;
     if(updateCamera&&this.camera instanceof THREE.OrthographicCamera){const aspect=this.host.clientWidth/Math.max(1,this.host.clientHeight);this.camera.top=this.span/2;this.camera.bottom=-this.span/2;this.camera.left=-this.span*aspect/2;this.camera.right=this.span*aspect/2;this.camera.updateProjectionMatrix();}
   }
   viewCamera(slot:ViewSlot,aspect=.75){
@@ -592,21 +647,22 @@ export class PoseEngine {
     const a=THREE.MathUtils.degToRad(slot.azimuth),e=THREE.MathUtils.degToRad(slot.elevation);
     cam.position.set(Math.sin(a)*Math.cos(e)*5,Math.sin(e)*5,Math.cos(a)*Math.cos(e)*5).add(this.center);cam.lookAt(this.center);cam.updateMatrixWorld();return cam;
   }
-  setView(id:string){
+  setView(id:string,persist=true){
+    if(this.cameraState?.locked&&persist)return;
     this.fly?.stop();
     const aspect=this.host.clientWidth/Math.max(1,this.host.clientHeight),slot=this.views.find(v=>v.id===id);
     this.view=id;
     if(slot)this.camera=this.viewCamera(slot,aspect);
-    else {this.camera=new THREE.PerspectiveCamera(35,aspect,.01,100);this.camera.position.copy(this.center).add(new V(1.25,.55,2.8));this.camera.lookAt(this.center);}
-    this.orbit.object=this.camera;this.orbit.target.copy(this.center);this.transform.camera=this.camera;this.orbit.update();
+    else {this.camera=new THREE.PerspectiveCamera(this.cameraState?.fov??35,aspect,.01,100);this.camera.position.copy(this.center).add(new V(1.25,.55,2.8));this.camera.lookAt(this.center);}
+    this.orbit.object=this.camera;this.orbit.target.copy(this.center);this.transform.camera=this.camera;this.orbit.update();if(persist)this.commitCamera();
   }
   captureView(id:string){
     const direction=this.camera.position.clone().sub(this.orbit.target).normalize();
     const slot=this.views.find(v=>v.id===id);if(!slot)return;
-    slot.azimuth=THREE.MathUtils.radToDeg(Math.atan2(direction.x,direction.z));slot.elevation=THREE.MathUtils.radToDeg(Math.asin(direction.y));this.fit();this.commit();
+    slot.azimuth=THREE.MathUtils.radToDeg(Math.atan2(direction.x,direction.z));slot.elevation=THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(Math.asin(direction.y)),-89,89);this.fit(false);this.commitCamera();
   }
-  resetViews(){this.views=structuredClone(DEFAULT_VIEWS);this.fit();this.commit();}
-  focus(){this.fit();this.setView(this.view);}
+  resetViews(){this.views=structuredClone(DEFAULT_VIEWS);this.fit(false);this.commitCamera();}
+  focus(){if(this.cameraState?.locked)return;this.fit(false);this.setView(this.view);}
 
   cocoWorld(){
     const head=this.bones.Head;
@@ -655,8 +711,8 @@ export class PoseEngine {
   }
   exportCamera(aspect:number){return cloneExportCamera(this.camera,aspect);}
   renderCurrent(width:number,height:number,kind:'surface'|'skeleton',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
-  getThumbnails(){return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,180,200,'surface').toDataURL('image/png')}));}
-  resize(){const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{this.camera.left=-this.span*w/h/2;this.camera.right=this.span*w/h/2;this.camera.top=this.span/2;this.camera.bottom=-this.span/2;}this.camera.updateProjectionMatrix();}
+  getThumbnails(){const {width,height}=this.cameraState.output,w=180,h=Math.round(w*height/width);return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,w,h,'surface').toDataURL('image/png')}));}
+  resize(){const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{const half=(this.camera.top-this.camera.bottom)/2;this.camera.left=-half*w/h;this.camera.right=half*w/h;}this.camera.updateProjectionMatrix();}
   private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(!this.fly.active)this.orbit.update();this.renderer.render(this.scene,this.camera);};
   dispose(){this.disposed=true;cancelAnimationFrame(this.frame);this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.orbit.dispose();this.transform.dispose();this.scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Line){o.geometry.dispose();const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose());}});this.renderer.dispose();this.renderer.domElement.remove();}
 }

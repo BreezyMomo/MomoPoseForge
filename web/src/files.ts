@@ -8,6 +8,7 @@ import {BODY_NAMES,HAND_NAMES,handTolerance} from './poseOutput';
 import {controlnetRecipe} from './controlnetWorkflow';
 import runnerSource from '../../tools/run-controlnet.py?raw';
 import requirementsSource from '../../tools/requirements-controlnet.txt?raw';
+import {validateCameraSettings,validOutputSize} from './cameraState';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -34,6 +35,7 @@ export function parseDocument(text:string,rest:PoseDocument):PoseDocument{
   if(!Array.isArray(d.views)||d.views.length!==5||d.views.some((v,i)=>!record(v)||v.id!==DEFAULT_VIEWS[i].id||typeof v.name!=='string'||v.name.length>30||!Number.isFinite(v.azimuth)||Math.abs(v.azimuth)>360||!Number.isFinite(v.elevation)||Math.abs(v.elevation)>89))throw new Error('五视图相机设置无效');
   if(!record(d.hands)||!['张手','握拳','指向','自定义'].includes(d.hands.Left)||!['张手','握拳','指向','自定义'].includes(d.hands.Right)||typeof d.ground!=='boolean')throw new Error('手型或地面设置无效');
   if(d.fullBody!==undefined&&typeof d.fullBody!=='boolean')throw new Error('全身联动设置无效');
+  if(d.camera!==undefined&&!validateCameraSettings(d.camera))throw new Error('相机书签、画幅或构图设置无效');
   return structuredClone(d);
 }
 
@@ -41,11 +43,12 @@ export function download(blob:Blob,name:string){const link=document.createElemen
 export const safeName=(name:string)=>name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g,'-').slice(0,64)||'pose';
 export function saveProject(doc:PoseDocument){download(new Blob([JSON.stringify(doc,null,2)],{type:'application/json'}),`${safeName(doc.name)}.pose.json`);}
 const toBlob=(c:HTMLCanvasElement)=>new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('图片生成失败')),'image/png'));
-export type ExportOptions={scope:'five'|'current';surface:boolean;skeleton:boolean;keypoints:boolean;depth:boolean;normal:boolean;sheet:boolean;project:boolean;resolution:768|1536;transparent:boolean;hideOccludedHands:boolean};
+export type ExportOptions={scope:'five'|'current';surface:boolean;skeleton:boolean;keypoints:boolean;depth:boolean;normal:boolean;sheet:boolean;project:boolean;resolution?:768|1536;width?:number;height?:number;transparent:boolean;hideOccludedHands:boolean};
 
 export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:AbortSignal,onProgress:(label:string)=>void){
   engine.fly?.stop();
-  const doc=engine.snapshot(),w=options.resolution,h=w*4/3;
+  const doc=engine.snapshot(),output=engine.getCameraSettings().output,w=options.width??options.resolution??output.width,h=options.height??(options.resolution?options.resolution*4/3:output.height);
+  if(!validOutputSize(w,h))throw new Error('图片宽高须为 256 至 2048 的整数');
   const slots:ViewSlot[]=options.scope==='five'?structuredClone(engine.views):[(()=>{const d=engine.camera.position.clone().sub(engine.orbit.target).normalize();return{id:'current',name:'当前视角',azimuth:Math.atan2(d.x,d.z)*180/Math.PI,elevation:Math.asin(d.y)*180/Math.PI};})()];
   const cameras=slots.map(slot=>options.scope==='current'?engine.exportCamera(w/h):engine.viewCamera(slot,w/h)),range=engine.depthRange(cameras),world=engine.skeletonData();
   const {default:JSZip}=await import('jszip');const zip=new JSZip();
@@ -73,7 +76,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
     }
     check();
     if(options.sheet){
-      const sheet=document.createElement('canvas');const cellW=Math.min(w,768),cellH=cellW*4/3,label=48;
+      const sheet=document.createElement('canvas');const cellW=Math.min(w,768),cellH=Math.round(cellW*h/w),label=48;
       sheet.width=cellW*(slots.length>1?3:1);sheet.height=(cellH+label)*(slots.length>1?2:1);
       const ctx=sheet.getContext('2d')!;ctx.fillStyle='#e7e8e5';ctx.fillRect(0,0,sheet.width,sheet.height);
       images.forEach((img,i)=>{const x=(i%3)*cellW,y=Math.floor(i/3)*(cellH+label);ctx.drawImage(img,x,y,cellW,cellH);ctx.fillStyle='#333635';ctx.font='20px sans-serif';ctx.fillText(slots[i].name,x+24,y+cellH+30);});
@@ -83,10 +86,10 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
     if(options.project)zip.file('project.pose.json',JSON.stringify(doc,null,2));
     if(options.keypoints)zip.file('skeleton-world.json',JSON.stringify(world,null,2));
     if(options.skeleton||options.depth||options.normal){
-      const recipe=controlnetRecipe(slots.map(s=>s.id),options,options.scope==='current'&&engine.handDetail?{side:engine.handDetail,shape:engine.hands[engine.handDetail]}:undefined);
+      const recipe=controlnetRecipe(slots.map(s=>s.id),options,options.scope==='current'&&engine.handDetail?{side:engine.handDetail,shape:engine.hands[engine.handDetail]}:undefined,{width:w,height:h});
       zip.file('workflow-controlnet.json',JSON.stringify(recipe,null,2));zip.file('tools/run-controlnet.py',runnerSource);zip.file('tools/requirements-controlnet.txt',requirementsSource);zip.file('workflows/controlnet-models.json',JSON.stringify(recipe.models,null,2));
     }
-    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.2.0',exportVersion:2,projectVersion:1,rig:doc.rig,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18 + 2 x HAND21',pointOrder:{body:BODY_NAMES,hand:HAND_NAMES},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five'},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
+    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.3.0',exportVersion:2,projectVersion:1,rig:doc.rig,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18 + 2 x HAND21',pointOrder:{body:BODY_NAMES,hand:HAND_NAMES},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
     zip.file('README.txt',[
       'MomoPoseForge 姿态导出 v2','',
       '每个视角：mannequin.png 是素体参考；openpose-body-hands.png 是身体 COCO18 + 双手各21点的黑底骨架控制图。',
@@ -95,7 +98,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       'openpose-coco18.png 和 keypoints-coco18.json 是保留的身体18点兼容文件。skeleton-world.json 是完整身体/手部的米制三维坐标，不是 OpenPose 的三角测量结果。',
       'depth.png：相机轴向深度线性归一化，近白远黑，五视图共用范围；normal.png：相机表面法线的 ControlNet 1.1 / ScanNet 可视化约定。数据图不含灯光、色调映射或 sRGB 转换。',
       'mask.png：白色是角色，黑色是背景。用它区分深度/法线图的背景；相机和深度范围完整记录在 manifest.json。',
-      'workflow-controlnet.json 提供固定模型版本、通道权重、种子和384x512生成配置。ZIP 同时附带 tools/run-controlnet.py、依赖清单和模型版本清单。',
+      'workflow-controlnet.json 提供固定模型版本、通道权重、种子与匹配画幅的生成配置（最长边512，8像素对齐）。非整比时等比缩放后补黑边，不拉伸控制图。ZIP 同时附带运行脚本、依赖和模型版本清单。',
       '本地复现：解压本 ZIP，在解压目录中创建 Python 虚拟环境，安装匹配显卡的 CUDA PyTorch，再 pip install -r tools/requirements-controlnet.txt；运行 python tools/run-controlnet.py 原ZIP路径 --ablation。首次运行下载约5GB公开模型，需要CUDA显卡。',
       '可用 --view 选择视角、--prompt 修改人物/服装描述、--seed 固定随机种子；--model-cache 指定模型缓存。已有模型时加 --offline。直接使用控制图，不要再做姿态/深度/法线估计。',
       '真实生成仍取决于所选模型和权重；X Bot 分段几何会进入深度/法线图，独立生成不同视角不会自动保证角色身份一致。',

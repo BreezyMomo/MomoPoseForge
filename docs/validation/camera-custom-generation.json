@@ -1,0 +1,68 @@
+{
+  "inputZip": "\u76f8\u673a\u65b9\u5f62\u9a8c\u6536 (2).zip",
+  "inputSha256": "7990015d9dedfc5bca2a4f7be92d477c3376d309825f43ea102a37cffcb80ccd",
+  "view": "current",
+  "inputImageSha256": {
+    "pose": "3a3c8430baa9de817e88c00f2b53348ff2d11e330fe587a2e088fbf5483af7ee",
+    "depth": "449da235cc9358b14bd191037b3c18aaf58adacb7a6317a99f48f11f02e3b183",
+    "normal": "9a42fc672fa846e7c0f399ab9f1cd561dda4f26a369543163ba37dfdd6234b61"
+  },
+  "sourceResolution": [
+    1000,
+    777
+  ],
+  "generationResolution": [
+    512,
+    400
+  ],
+  "seed": 20261029,
+  "steps": 24,
+  "prompt": "A full body studio photograph of an adult person in a blue athletic outfit and sneakers, matching the reference pose, neutral light gray background, realistic human anatomy, natural fabric.",
+  "negativePrompt": "robot, mannequin, plastic, armor, mechanical joints, extra limbs, extra fingers, missing fingers, text, watermark",
+  "scheduler": "UniPCMultistepScheduler",
+  "models": {
+    "base": {
+      "repo": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "revision": "451f4fe16113bff5a5d2269ed5ad43b0592e9a14"
+    },
+    "pose": {
+      "repo": "lllyasviel/control_v11p_sd15_openpose",
+      "revision": "9ae9f970358db89e211b87c915f9535c6686d5ba"
+    },
+    "depth": {
+      "repo": "lllyasviel/control_v11f1p_sd15_depth",
+      "revision": "539f99181d33db39cf1af2e517cd8056785f0a87"
+    },
+    "normal": {
+      "repo": "lllyasviel/control_v11p_sd15_normalbae",
+      "revision": "cb7296e6587a219068e9d65864e38729cd862aa8"
+    }
+  },
+  "runtime": {
+    "torch": "2.5.1+cu121",
+    "diffusers": "0.35.2",
+    "transformers": "4.44.2",
+    "gpu": "NVIDIA GeForce RTX 4070"
+  },
+  "results": [
+    {
+      "controls": [
+        "pose",
+        "depth",
+        "normal"
+      ],
+      "scales": [
+        0.9,
+        0.5,
+        0.3
+      ],
+      "output": "current-pose-depth-normal.png",
+      "seconds": 6.833830199990189,
+      "peakCudaAllocatedMiB": 4579.2900390625,
+      "nsfwContentDetected": [
+        false
+      ]
+    }
+  ],
+  "scope": "Generation and input compatibility; does not certify exact finger anatomy or multi-view identity consistency."
+}

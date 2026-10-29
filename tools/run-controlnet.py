@@ -25,6 +25,16 @@ FILES = {'pose': 'openpose-body-hands.png', 'depth': 'depth.png', 'normal': 'nor
 MAX_PNG_BYTES = 32_000_000
 
 
+def generation_size(width: int, height: int):
+    scale = 512 / max(width, height)
+    return tuple(max(64, math.floor(value * scale / 8 + .5) * 8) for value in (width, height))
+
+
+def prepare_control(image, size):
+    from PIL import Image, ImageOps
+    return ImageOps.pad(image, size, method=Image.Resampling.LANCZOS, color=(0, 0, 0))
+
+
 def read_export(filename: Path, view: str | None):
     from PIL import Image
     with zipfile.ZipFile(filename) as archive:
@@ -42,8 +52,8 @@ def read_export(filename: Path, view: str | None):
             if recipe.get('models', {}).get(kind) != {'repo': repo, 'revision': revision}:
                 raise ValueError(f'Unexpected model or revision: {kind}')
         views = [item['id'] for item in manifest['views']]
-        if not isinstance(manifest.get('width'), int) or not isinstance(manifest.get('height'), int) or not 0 < manifest['height'] <= 2048 or manifest['width']*4 != manifest['height']*3:
-            raise ValueError('Expected portrait 3:4 control images')
+        if any(type(manifest.get(key)) is not int or not 0 < manifest[key] <= 2048 for key in ('width', 'height')):
+            raise ValueError('Invalid control image dimensions')
         selected = view or views[0]
         if selected not in views or selected not in ['front', 'oblique', 'side', 'high', 'low', 'current']:
             raise ValueError('Choose a view contained in this export')
@@ -82,7 +92,7 @@ def run(args):
     width, height = generation['width'], generation['height']
     seed = args.seed if args.seed is not None else generation['seed']
     steps = args.steps if args.steps is not None else generation['steps']
-    if not 1 <= steps <= 100 or not 0 <= seed <= 2**32 - 1 or (width, height) != (384, 512):
+    if not 1 <= steps <= 100 or not 0 <= seed <= 2**32 - 1 or (width, height) != generation_size(manifest['width'], manifest['height']):
         raise ValueError('Invalid seed, step count, or generation dimensions')
     prompt = args.prompt or generation['prompt']
     groups = [list(images)]
@@ -111,7 +121,7 @@ def run(args):
         pipeline.enable_model_cpu_offload()
         pipeline.enable_vae_slicing()
         pipeline.enable_attention_slicing('auto')
-        controls = [images[kind] for kind in kinds]
+        controls = [prepare_control(images[kind], (width, height)) for kind in kinds]
         scales = [next(item['scale'] for item in recipe['controls'] if item['kind'] == kind) for kind in kinds]
         if any(not isinstance(scale, (int, float)) or not 0 <= scale <= 2 for scale in scales):
             raise ValueError('Control scale outside supported range')
@@ -132,7 +142,7 @@ def run(args):
     sheet = Image.new('RGB', ((len(sources)+len(results))*width, height+36), '#202121')
     draw = ImageDraw.Draw(sheet)
     for i, (label, image) in enumerate(sources):
-        sheet.paste(image.resize((width, height)), (i*width, 36));draw.text((i*width+8, 10), label, fill='white')
+        sheet.paste(prepare_control(image, (width, height)), (i*width, 36));draw.text((i*width+8, 10), label, fill='white')
     for i, result in enumerate(results, start=len(sources)):
         sheet.paste(Image.open(args.out/result['output']).convert('RGB'), (i*width, 36));draw.text((i*width+8, 10), '+'.join(result['controls']), fill='white')
     sheet.save(args.out / 'comparison.png')

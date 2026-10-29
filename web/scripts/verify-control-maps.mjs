@@ -43,7 +43,8 @@ for(const view of manifest.views){
   for(let i=0;i<w*h;i++){const offset=i*4;assert.ok(mask.data[offset]===0||mask.data[offset]===255,'mask must be binary');if(mask.data[offset])foreground++;else{assert.equal(depth.data[offset]+depth.data[offset+1]+depth.data[offset+2],0);assert.equal(normal.data[offset]+normal.data[offset+1]+normal.data[offset+2],0);}}
   assert.ok(foreground>100,'nonempty character required');
   let viewSamples=0;
-  const stride=Math.max(8,Math.floor(w/25));
+  // Keep enough surface samples when a wide/free camera leaves the figure small.
+  const stride=Math.max(4,Math.floor(Math.sqrt(foreground/120)));
   for(let y=stride;y<h-stride;y+=stride)for(let x=stride;x<w-stride;x+=stride){
     if(![-1,0,1].every(d=>mask.data[(y*w+x+d)*4]===255&&mask.data[((y+d)*w+x)*4]===255))continue;
     const hit=hitAt(camera,x,y,w,h);assert.ok(hit,'foreground must correspond to the real skin');const eyeDepth=-hit.point.clone().applyMatrix4(camera.matrixWorldInverse).z;
@@ -70,7 +71,7 @@ for(const view of manifest.views){
   }
   results.push({view:view.id,foregroundPixels:foreground,surfaceSamples:viewSamples,visibleHandPoints:valid});
 }
-assert.ok(samples>25);assert.ok(depthError<2,`linear depth error ${depthError}`);assert.ok(normalError<3,`normal encoding error ${normalError}`);assert.ok(keypointError<.001);assert.ok(worldError<1e-6);assert.equal(handVisibilityMismatches,0);
+assert.ok(samples>25,`Need at least 26 surface samples; got ${samples}`);assert.ok(depthError<2,`linear depth error ${depthError}`);assert.ok(normalError<3,`normal encoding error ${normalError}`);assert.ok(keypointError<.001);assert.ok(worldError<1e-6);assert.equal(handVisibilityMismatches,0);
 const report={views:results,samples,maximumDepthByteError:depthError,maximumNormalByteError:normalError,maximumHandProjectionErrorPixels:keypointError,maximumWorldErrorMetres:worldError,handVisibilityMismatches};
 if(process.argv[3])fs.writeFileSync(process.argv[3],JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));

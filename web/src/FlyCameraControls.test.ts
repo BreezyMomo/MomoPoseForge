@@ -14,6 +14,10 @@ function fixture(){
 }
 
 describe('右键飞行镜头的输入生命周期',()=>{
+  it('观察锁拒绝进入导航时不捕获指针，也不会因按住 WASD 移动',()=>{
+    const f=fixture();f.activity.mockReturnValue(false);f.send(f.host,'keydown',{code:'KeyW'});const before=f.camera.position.clone();f.start();f.controls.update(.05);
+    expect(f.controls.active).toBe(false);expect(f.canvas.hasPointerCapture(1)).toBe(false);expect(f.camera.position.equals(before)).toBe(true);expect(f.focus).not.toHaveBeenCalled();f.controls.dispose();
+  });
   it('不按右键时不接管 W，也不移动镜头',()=>{
     const f=fixture(),before=f.camera.position.clone();
     expect(f.send(f.host,'keydown',{code:'KeyW'}).defaultPrevented).toBe(false);f.controls.update(.05);

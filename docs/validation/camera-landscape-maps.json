@@ -1,0 +1,55 @@
+{
+  "views": [
+    {
+      "view": "front",
+      "foregroundPixels": 66696,
+      "surfaceSamples": 42,
+      "visibleHandPoints": {
+        "Left": 5,
+        "Right": 5
+      }
+    },
+    {
+      "view": "oblique",
+      "foregroundPixels": 75684,
+      "surfaceSamples": 45,
+      "visibleHandPoints": {
+        "Left": 8,
+        "Right": 6
+      }
+    },
+    {
+      "view": "side",
+      "foregroundPixels": 65669,
+      "surfaceSamples": 38,
+      "visibleHandPoints": {
+        "Left": 10,
+        "Right": 0
+      }
+    },
+    {
+      "view": "high",
+      "foregroundPixels": 67258,
+      "surfaceSamples": 42,
+      "visibleHandPoints": {
+        "Left": 12,
+        "Right": 12
+      }
+    },
+    {
+      "view": "low",
+      "foregroundPixels": 75140,
+      "surfaceSamples": 46,
+      "visibleHandPoints": {
+        "Left": 5,
+        "Right": 5
+      }
+    }
+  ],
+  "samples": 213,
+  "maximumDepthByteError": 0.5591728671316787,
+  "maximumNormalByteError": 0.5529643283980761,
+  "maximumHandProjectionErrorPixels": 0.0004962736159654924,
+  "maximumWorldErrorMetres": 0,
+  "handVisibilityMismatches": 0
+}

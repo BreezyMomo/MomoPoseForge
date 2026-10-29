@@ -14,7 +14,7 @@ spec.loader.exec_module(runner)
 
 
 class ExportContract(unittest.TestCase):
-    def export(self, mutate=None, image_size=(6, 8), omit=None):
+    def export(self, mutate=None, image_size=(6, 8), omit=None, manifest_size=(6, 8)):
         recipe = {'format': 'momo-pose-forge-controlnet', 'version': 1, 'models': runner.MODEL_MANIFEST,
                   'controls': [{'kind': key, 'file': name, 'scale': .5} for key, name in runner.FILES.items()]}
         if mutate:
@@ -26,7 +26,7 @@ class ExportContract(unittest.TestCase):
         Image.new('RGB', image_size, '#8080ff').save(image, 'PNG')
         with zipfile.ZipFile(target, 'w') as archive:
             archive.writestr('workflow-controlnet.json', json.dumps(recipe))
-            archive.writestr('manifest.json', json.dumps({'views': [{'id': 'front'}], 'width': 6, 'height': 8}))
+            archive.writestr('manifest.json', json.dumps({'views': [{'id': 'front'}], 'width': manifest_size[0], 'height': manifest_size[1]}))
             for name in runner.FILES.values():
                 if name != omit:
                     archive.writestr('front/' + name, image.getvalue())
@@ -67,6 +67,28 @@ class ExportContract(unittest.TestCase):
     def test_rejects_duplicate_control(self):
         with self.assertRaisesRegex(ValueError, 'duplicate'):
             runner.read_export(self.export(lambda r: r['controls'].append(r['controls'][0])), None)
+
+    def test_reads_square_landscape_and_custom_exports(self):
+        for size in [(8, 8), (8, 6), (13, 7)]:
+            _, manifest, _, controls, _ = runner.read_export(self.export(image_size=size, manifest_size=size), None)
+            self.assertEqual(controls['pose'].size, size)
+            self.assertEqual(manifest['width'], size[0])
+
+    def test_generation_size_keeps_original_portrait_and_matches_new_aspects(self):
+        for source, expected in [((768, 1024), (384, 512)), ((1024, 1024), (512, 512)), ((1024, 768), (512, 384)), ((1536, 864), (512, 288)), ((256, 2048), (64, 512))]:
+            self.assertEqual(runner.generation_size(*source), expected)
+
+    def test_control_resize_pads_instead_of_stretching(self):
+        source = Image.new('RGB', (12, 6), 'white')
+        image = runner.prepare_control(source, (16, 16))
+        self.assertEqual(image.size, (16, 16))
+        self.assertEqual(image.getpixel((8, 0)), (0, 0, 0))
+        self.assertEqual(image.getpixel((8, 8)), (255, 255, 255))
+
+    def test_rejects_invalid_manifest_dimensions(self):
+        for size in [(0, 8), (True, 8), (8, 2049)]:
+            with self.assertRaisesRegex(ValueError, 'dimensions'):
+                runner.read_export(self.export(manifest_size=size), None)
 
 
 if __name__ == '__main__':

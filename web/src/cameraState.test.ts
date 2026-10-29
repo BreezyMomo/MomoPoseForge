@@ -1,0 +1,70 @@
+import {describe,it,expect,vi} from 'vitest';
+import fs from 'node:fs';
+import {Bone,Group,Object3D,Vector3,PerspectiveCamera,OrthographicCamera,Quaternion} from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {PoseEngine} from './PoseEngine';
+import {captureCamera,restoreCamera,defaultCameraSettings,validateCameraSettings} from './cameraState';
+import {parseDocument} from './files';
+import {PRESETS} from './presets';
+import {END_EFFECTORS,DEFAULT_VIEWS} from './types';
+import {generationSize,controlnetRecipe} from './controlnetWorkflow';
+import profile from '../public/models/xbot-profile.json';
+
+const bytes=fs.readFileSync(new URL('../public/models/xbot.glb',import.meta.url));
+async function fixture(){
+  const {scene}=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+  const e=Object.create(PoseEngine.prototype) as PoseEngine,model=new Group(),bones:Record<string,Bone>={};model.add(scene);model.traverse(b=>{if(b instanceof Bone)bones[b.name]=b;});model.updateMatrixWorld(true);
+  const camera=new PerspectiveCamera(35,900/700,.01,100),target=new Vector3(0,.85,0);camera.position.set(1.25,1.4,2.8);camera.lookAt(target);camera.updateMatrixWorld(true);
+  const orbit={object:camera,target,enabled:true,update:()=>{e.camera.lookAt(orbit.target);e.camera.updateMatrixWorld(true);}};
+  Object.assign(e,{model,bones,camera,orbit,host:{clientWidth:900,clientHeight:700},renderer:{setSize:vi.fn()},transform:{dragging:false,camera,setMode(){},attach(){}},fly:{stop(){}},gizmo:new Object3D(),ready:false,profile,center:new Vector3(0,.85,0),span:1.98,views:structuredClone(DEFAULT_VIEWS),cameraState:defaultCameraSettings(),selected:'LeftHand',mode:'translate',view:'free',display:'surface',handles:[],pins:{},targets:{},poles:{},ground:true,fullBody:true,hands:{Left:'张手',Right:'张手'},name:'相机验收',onInfo:vi.fn(),onCommit:vi.fn()});
+  for(const end of END_EFFECTORS){e.targets[end]=e.world(end).toArray();e.poles[end]=e.world(end).add(new Vector3(0,0,.8)).toArray();}
+  e.rest=e.snapshot();e.ready=true;e.applyPreset(PRESETS[0],false);e.focus();return e;
+}
+const matrix=(e:PoseEngine)=>e.camera.matrixWorld.toArray();
+describe('相机、工程与五视图构图',()=>{
+  it('锁定构图后连续套用全部预设，五个相机矩阵和尺度不漂移',async()=>{
+    const e=await fixture();e.setFramingLock(true);const before=e.views.map(v=>e.viewCamera(v,1).projectionMatrix.toArray().concat(e.viewCamera(v,1).matrixWorld.toArray())),frame=e.getCameraSettings().framing;
+    for(const p of PRESETS){e.applyPreset(p);expect(e.getCameraSettings().framing).toEqual(frame);expect(e.views.map(v=>e.viewCamera(v,1).projectionMatrix.toArray().concat(e.viewCamera(v,1).matrixWorld.toArray()))).toEqual(before);}
+  });
+  it('出框提示不偷偷改变构图；显式重新适配后仍保持锁定',async()=>{
+    const e=await fixture();e.setFramingLock(true);const center=e.center.clone(),span=e.span;e.model.position.x+=3;e.commit();expect(e.center.equals(center)).toBe(true);expect(e.span).toBe(span);expect(e.framingWarning()).toContain('可能超出画幅');
+    e.reframe();expect(e.cameraState.framing.locked).toBe(true);expect(e.center.x-center.x).toBeCloseTo(3,8);expect(e.framingWarning()).toBe('');
+  });
+  it('观察锁阻止切视角、聚焦、手部聚焦、FOV 和投影切换，但仍可改姿态',async()=>{
+    const e=await fixture();e.setCameraLock(true);const before=matrix(e),pose=e.snapshot().joints;e.setView('side');e.focus();e.focusHand('Left');e.setFov(80);e.setProjection('orthographic');e.applyPreset(PRESETS.find(p=>p.id==='squat')!);
+    expect(matrix(e)).toEqual(before);expect(e.cameraState.fov).toBe(35);expect(e.snapshot().joints).not.toEqual(pose);expect(e.orbit.enabled).toBe(false);e.setCameraLock(false);expect(e.orbit.enabled).toBe(true);
+  });
+  it('透视书签恢复位置、朝向、目标与 FOV，改名/重存不生成重复项',async()=>{
+    const e=await fixture();e.setFov(57);e.camera.position.set(-1,1.6,2);e.camera.lookAt(e.orbit.target);e.camera.updateMatrixWorld(true);e.saveCameraBookmark('主构图');const saved=e.getCameraSettings().bookmarks[0];
+    e.setView('side');e.loadCameraBookmark(saved.id);expect(matrix(e)).toEqual(restoreCamera(saved.camera,900/700).matrixWorld.toArray());expect(e.orbit.target.toArray()).toEqual(saved.camera.target);expect(e.cameraState.fov).toBe(57);
+    expect(e.renameCameraBookmark(saved.id,'近景')).toBe(true);e.saveCameraBookmark('近景');expect(e.cameraState.bookmarks).toHaveLength(1);expect(e.cameraState.bookmarks[0].id).toBe(saved.id);expect(vi.mocked(e.onCommit).mock.calls.at(-1)?.[1]).toBe(false);
+  });
+  it('正交书签的独立尺度和缩放不被窗口 resize 替换成五视图尺度',async()=>{
+    const e=await fixture();e.setView('front');const c=e.camera as OrthographicCamera;c.top=.4;c.bottom=-.4;c.zoom=1.8;c.updateProjectionMatrix();e.saveCameraBookmark('细节');const saved=e.cameraState.bookmarks[0];e.setView('free');e.loadCameraBookmark(saved.id);
+    Object.assign(e.host,{clientWidth:390,clientHeight:844});e.resize();const actual=e.camera as OrthographicCamera;expect(actual.top-actual.bottom).toBeCloseTo(.8,12);expect(actual.zoom).toBe(1.8);expect((actual.right-actual.left)/.8).toBeCloseTo(390/844,12);expect(validateCameraSettings(e.getCameraSettings())).toBe(true);
+  });
+  it('工程往返恢复自由镜头、书签、名称、画幅和锁定状态；姿态撤销不撤销观察',async()=>{
+    const e=await fixture();e.setFov(49);e.setOutputSize(1000,777);e.renameView('front','正面定稿');e.setFramingLock(true);e.saveCameraBookmark('定稿');e.setCameraLock(true);const doc=e.snapshot(),copy=await fixture();copy.apply(parseDocument(JSON.stringify(doc),copy.rest));
+    expect(copy.getCameraSettings()).toEqual(doc.camera);expect(copy.views[0].name).toBe('正面定稿');expect(copy.orbit.enabled).toBe(false);for(const [name,joint] of Object.entries(doc.joints)){expect(copy.bones[name].position.distanceTo(new Vector3().fromArray(joint.position))).toBeLessThan(1e-12);expect(copy.bones[name].quaternion.angleTo(new Quaternion().fromArray(joint.quaternion))).toBeLessThan(1e-7);}
+    copy.setCameraLock(false);copy.setFov(65);const camera=copy.getCameraSettings();copy.apply(doc,true,false);expect(copy.getCameraSettings()).toEqual(camera);
+  });
+  it('旧 v1 工程缺少相机字段时，恢复为未锁定和竖幅自动适配',async()=>{
+    const e=await fixture(),old=e.snapshot();delete old.camera;e.setCameraLock(true);e.setFramingLock(true);e.apply(parseDocument(JSON.stringify(old),e.rest));const camera=e.getCameraSettings();expect(camera.locked||camera.framing.locked).toBe(false);expect(camera.output).toEqual({width:768,height:1024});expect(validateCameraSettings(camera)).toBe(true);
+  });
+  it('画幅变化保持锁定的世界构图，并按实际宽高生成投影',async()=>{
+    const e=await fixture();e.setFramingLock(true);const frame=e.getCameraSettings().framing;expect(e.setOutputSize(256,2048)).toBe(true);expect(e.getCameraSettings().framing).toEqual(frame);const c=e.viewCamera(e.views[0],256/2048);expect((c.right-c.left)/(c.top-c.bottom)).toBe(.125);expect(e.setOutputSize(2049,512)).toBe(false);expect(e.setOutputSize(512.2,512)).toBe(false);
+  });
+  it('拒绝损坏相机、零缩放、重复书签和非法画幅，且不修改原工程',async()=>{
+    const e=await fixture(),original=e.snapshot();e.saveCameraBookmark('A');const doc=e.snapshot();
+    for(const mutate of [(d:typeof doc)=>{d.camera!.active.quaternion=[0,0,0,0];},(d:typeof doc)=>{d.camera!.active.zoom=0;},(d:typeof doc)=>{d.camera!.active.target=d.camera!.active.position;},(d:typeof doc)=>{d.camera!.bookmarks.push(d.camera!.bookmarks[0]);},(d:typeof doc)=>{d.camera!.output.width=2049;},(d:typeof doc)=>{d.camera!.framing.verticalSpan=-1;}]){const bad=structuredClone(doc);mutate(bad);expect(()=>parseDocument(JSON.stringify(bad),e.rest)).toThrow('相机');}
+    expect(e.snapshot().joints).toEqual(original.joints);
+  });
+  it('不同宽高的工作流使用最长边 512、8 像素对齐尺寸，保留旧竖幅参数',()=>{
+    for(const [source,expected] of [[[768,1024],[384,512]],[[1024,1024],[512,512]],[[1024,768],[512,384]],[[1536,864],[512,288]],[[256,2048],[64,512]]])expect(generationSize(...source as [number,number])).toEqual({width:expected[0],height:expected[1]});
+    const recipe=controlnetRecipe(['front'],{skeleton:true,depth:true,normal:true},undefined,{width:1024,height:768});expect(recipe.generation.width).toBe(512);expect(recipe.generation.height).toBe(384);expect(recipe.generation.resize).toContain('no stretching');
+  });
+  it('底层相机重建在不同画幅下保留朝向与中心光线',()=>{
+    const c=new PerspectiveCamera(72,1,.02,150),target=new Vector3(.3,1,.2);c.position.set(2,1.8,3);c.lookAt(target);c.updateMatrixWorld(true);const pose=captureCamera(c,target,72);
+    for(const aspect of [.125,1,8]){const restored=restoreCamera(pose,aspect);expect(restored.getWorldDirection(new Vector3()).distanceTo(c.getWorldDirection(new Vector3()))).toBeLessThan(1e-12);const p=target.clone().project(restored);expect(Math.abs(p.x)+Math.abs(p.y)).toBeLessThan(1e-12);expect(new Quaternion().fromArray(pose.quaternion).length()).toBeCloseTo(1,12);}
+  });
+});

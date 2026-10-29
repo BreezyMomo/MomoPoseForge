@@ -1,0 +1,19 @@
+{
+  "views": [
+    {
+      "view": "current",
+      "foregroundPixels": 23887,
+      "surfaceSamples": 114,
+      "visibleHandPoints": {
+        "Left": 6,
+        "Right": 6
+      }
+    }
+  ],
+  "samples": 114,
+  "maximumDepthByteError": 0.5500064558009115,
+  "maximumNormalByteError": 0.5483989914819176,
+  "maximumHandProjectionErrorPixels": 0.00048793503066235644,
+  "maximumWorldErrorMetres": 0,
+  "handVisibilityMismatches": 0
+}

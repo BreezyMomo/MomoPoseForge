@@ -11,9 +11,9 @@ export function flyTranslation(camera:Camera,keys:ReadonlySet<string>,seconds:nu
     .normalize().multiplyScalar(MathUtils.clamp(seconds,0,.05)*1.2*(fast?3:1));
 }
 
-export function perspectiveForNavigation(camera:OrthographicCamera,target:Vector3){
-  const perspective=new PerspectiveCamera(35,(camera.right-camera.left)/(camera.top-camera.bottom),.01,100);
-  const height=(camera.top-camera.bottom)/camera.zoom,distance=height/(2*Math.tan(MathUtils.degToRad(35)/2));
+export function perspectiveForNavigation(camera:OrthographicCamera,target:Vector3,fov=35){
+  const perspective=new PerspectiveCamera(fov,(camera.right-camera.left)/(camera.top-camera.bottom),.01,100);
+  const height=(camera.top-camera.bottom)/camera.zoom,distance=height/(2*Math.tan(MathUtils.degToRad(fov)/2));
   perspective.quaternion.copy(camera.quaternion);
   perspective.position.copy(target).addScaledVector(camera.getWorldDirection(new Vector3()),-distance);
   perspective.updateMatrixWorld(true);return perspective;
