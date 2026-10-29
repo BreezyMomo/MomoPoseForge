@@ -9,6 +9,8 @@ import {PRESETS} from './presets';
 import {END_EFFECTORS,DEFAULT_VIEWS} from './types';
 import {generationSize,controlnetRecipe} from './controlnetWorkflow';
 import profile from '../public/models/xbot-profile.json';
+import type {ReferenceImage} from './referenceImage';
+const referenceFixture=():ReferenceImage=>({version:1,id:'reference-fixture',name:'参考.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',width:1,height:1,opacity:.4,scale:1,offsetX:0,offsetY:0,locked:true,visible:true});
 
 const bytes=fs.readFileSync(new URL('../public/models/xbot.glb',import.meta.url));
 async function fixture(){
@@ -22,6 +24,21 @@ async function fixture(){
 }
 const matrix=(e:PoseEngine)=>e.camera.matrixWorld.toArray();
 describe('相机、工程与五视图构图',()=>{
+  it('参考图片只写入工程元数据，不加入场景，也不改变骨骼、相机或构图',async()=>{
+    const e=await fixture(),before=e.snapshot(),children=[...e.model.children];e.setReferenceImage(referenceFixture());e.setReferenceSettings({opacity:.3,scale:1.5,offsetX:.2,offsetY:-.1});
+    const after=e.snapshot();expect(after.joints).toEqual(before.joints);expect(after.camera).toEqual(before.camera);expect(e.model.children).toEqual(children);expect(after.referenceImage?.scale).toBe(1.5);expect(vi.mocked(e.onCommit).mock.calls.at(-1)?.[1]).toBe(false);
+  });
+  it('内嵌图片与位置可随工程恢复，旧工程不会遗留上一个工程的参考图',async()=>{
+    const e=await fixture();e.setReferenceImage(referenceFixture());e.setReferenceSettings({offsetX:-.2,scale:2,visible:false});const doc=e.snapshot(),copy=await fixture();copy.apply(parseDocument(JSON.stringify(doc),copy.rest));expect(copy.referenceImage).toEqual(doc.referenceImage);
+    delete doc.referenceImage;copy.apply(parseDocument(JSON.stringify(doc),copy.rest));expect(copy.referenceImage).toBeUndefined();expect(copy.orbit.enabled).toBe(true);
+  });
+  it('套用预设和姿态撤销保留当前参考图，实时预览不会增加姿态历史',async()=>{
+    const e=await fixture(),pose=e.snapshot();e.setReferenceImage(referenceFixture());const calls=vi.mocked(e.onCommit).mock.calls.length;e.setReferenceSettings({offsetX:.3},false);expect(vi.mocked(e.onCommit).mock.calls).toHaveLength(calls);e.commitReference();expect(vi.mocked(e.onCommit).mock.calls.at(-1)?.[1]).toBe(false);
+    e.applyPreset(PRESETS.find(p=>p.id==='squat')!);expect(e.referenceImage?.offsetX).toBe(.3);e.apply(pose,true,false);expect(e.referenceImage?.offsetX).toBe(.3);
+  });
+  it('参考图编辑与观察锁共同控制导航，隐藏或移除图片不会解除观察锁',async()=>{
+    const e=await fixture();e.setReferenceImage(referenceFixture());e.setReferenceSettings({locked:false});expect(e.orbit.enabled).toBe(false);e.setReferenceSettings({visible:false});expect(e.orbit.enabled).toBe(true);e.setCameraLock(true);e.setReferenceSettings({visible:true,locked:true});expect(e.orbit.enabled).toBe(false);e.setReferenceImage();expect(e.orbit.enabled).toBe(false);e.setCameraLock(false);expect(e.orbit.enabled).toBe(true);
+  });
   it('锁定构图后连续套用全部预设，五个相机矩阵和尺度不漂移',async()=>{
     const e=await fixture();e.setFramingLock(true);const before=e.views.map(v=>e.viewCamera(v,1).projectionMatrix.toArray().concat(e.viewCamera(v,1).matrixWorld.toArray())),frame=e.getCameraSettings().framing;
     for(const p of PRESETS){e.applyPreset(p);expect(e.getCameraSettings().framing).toEqual(frame);expect(e.views.map(v=>e.viewCamera(v,1).projectionMatrix.toArray().concat(e.viewCamera(v,1).matrixWorld.toArray()))).toEqual(before);}

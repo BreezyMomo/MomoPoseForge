@@ -13,6 +13,7 @@ import {LOCAL_AXES,solveConstrainedIK,captureJoints,restoreJoints,interpolateJoi
 import {COCO_LINKS,COCO_COLORS,HAND_LINKS,handBones,projectPose,paintSkeleton,worldSkeleton,depthVisibility,type OpenPoseFrame} from './poseOutput';
 import {depthRangeFor,dataMaterial,type DepthRange,type RenderKind,type DataKind} from './renderPasses';
 import {defaultCameraSettings,captureCamera,restoreCamera,validOutputSize,type CameraSettings} from './cameraState';
+import {validateReferenceImage,referenceWithSettings,type ReferenceImage,type ReferenceSettings} from './referenceImage';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
@@ -57,6 +58,7 @@ export class PoseEngine {
   center = new V(0,.85,0);
   span = 1.98;
   cameraState=defaultCameraSettings();
+  referenceImage?:ReferenceImage;
   vertexCount = 0;
   disposed = false;
   private resizeObserver: ResizeObserver;
@@ -113,7 +115,7 @@ export class PoseEngine {
     this.transform.setSpace('world');
     this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', (event) => {
-      this.orbit.enabled = !event.value&&!this.cameraState.locked;
+      this.orbit.enabled = !event.value&&this.canNavigateCamera();
       if (event.value) { this.dragBefore = this.snapshot(); this.cancelPending = false; }
       else if (this.dragBefore) {
         if (this.cancelPending) this.apply(this.dragBefore);
@@ -124,11 +126,11 @@ export class PoseEngine {
     this.renderer.domElement.addEventListener('pointerdown', this.pointerDown);
     this.fly=new FlyCameraControls(this.renderer.domElement,()=>this.camera,()=>this.syncNavigationTarget(),active=>{
       if(active){
-        if(this.transform.dragging||this.cameraState.locked)return false;
+        if(this.transform.dragging||!this.canNavigateCamera())return false;
         if(this.camera instanceof THREE.OrthographicCamera){this.camera=perspectiveForNavigation(this.camera,this.orbit.target,this.cameraState.fov);this.orbit.object=this.camera;this.transform.camera=this.camera;}
         this.navigationDistance=this.camera.position.distanceTo(this.orbit.target);
         this.orbit.enabled=false;this.transform.enabled=false;this.view='free';
-      }else{this.syncNavigationTarget();this.transform.enabled=true;this.orbit.enabled=!this.transform.dragging&&!this.cameraState.locked;this.commitCamera();}
+      }else{this.syncNavigationTarget();this.transform.enabled=true;this.orbit.enabled=!this.transform.dragging&&this.canNavigateCamera();this.commitCamera();}
       if(this.ready)this.onInfo(this.info());
     });
     this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(this.host);
@@ -136,6 +138,17 @@ export class PoseEngine {
   }
 
   private syncNavigationTarget(){this.orbit.target.copy(this.camera.position).addScaledVector(this.camera.getWorldDirection(new V()),this.navigationDistance);}
+  private canNavigateCamera(){return !this.cameraState?.locked&&(!this.referenceImage?.visible||this.referenceImage.locked);}
+  setReferenceImage(image?:ReferenceImage){
+    if(image&&!validateReferenceImage(image))throw new Error('参考图片数据无效');
+    this.referenceImage=image?structuredClone(image):undefined;if(!this.canNavigateCamera())this.fly?.stop();this.orbit&&(this.orbit.enabled=!this.transform.dragging&&this.canNavigateCamera());this.commitReference();
+  }
+  setReferenceSettings(patch:Partial<ReferenceSettings>,commit=true){
+    if(!this.referenceImage)return;this.referenceImage=referenceWithSettings(this.referenceImage,patch);
+    if(!this.canNavigateCamera())this.fly?.stop();if(this.orbit)this.orbit.enabled=!this.transform.dragging&&this.canNavigateCamera();
+    if(commit)this.commitReference();else if(this.ready)this.onInfo(this.info());
+  }
+  commitReference(){if(!this.ready)return;this.onInfo(this.info());this.onCommit(this.snapshot(),false);}
 
   async load() {
     const [gltf, profile] = await Promise.all([
@@ -549,11 +562,12 @@ export class PoseEngine {
   private syncTargets(){this.model.updateMatrixWorld(true);for(const end of END_EFFECTORS)this.targets[end]=asVec(this.world(end));}
   snapshot():PoseDocument{
     const joints:PoseDocument['joints']={};for(const[name,b]of Object.entries(this.bones))joints[name]={position:b.position.toArray(),quaternion:b.quaternion.toArray()};
-    return structuredClone({format:'momo-pose-forge',version:1,rig:CURRENT_MODEL.rig,name:this.name,root:{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,views:this.views,ground:this.ground,fullBody:this.fullBody,...(this.camera?{camera:this.getCameraSettings()}: {})}) as PoseDocument;
+    return structuredClone({format:'momo-pose-forge',version:1,rig:CURRENT_MODEL.rig,name:this.name,root:{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,views:this.views,ground:this.ground,fullBody:this.fullBody,...(this.camera?{camera:this.getCameraSettings()}: {}),...(this.referenceImage?{referenceImage:this.referenceImage}: {})}) as PoseDocument;
   }
-  apply(doc:PoseDocument,update=true,restoreView=true){
+  apply(doc:PoseDocument,update=true,restoreView=true,restoreReference=restoreView){
     this.suppress=true;this.fly?.stop();this.warning='';this.name=doc.name;this.ground=doc.ground;
     if(restoreView){this.views=structuredClone(doc.views);this.cameraState=structuredClone(doc.camera??defaultCameraSettings());}
+    if(restoreReference)this.referenceImage=doc.referenceImage?structuredClone(doc.referenceImage):undefined;
     this.fullBody=doc.fullBody??true;
     this.model.position.fromArray(doc.root.position);this.model.quaternion.fromArray(doc.root.quaternion);
     for(const[name,j]of Object.entries(doc.joints)){const b=this.bones[name];if(b){b.position.fromArray(j.position);b.quaternion.fromArray(j.quaternion);}}
@@ -561,13 +575,13 @@ export class PoseEngine {
     this.targets=structuredClone(doc.targets);this.poles=structuredClone(doc.poles);this.pins=structuredClone(doc.pins);this.hands={...doc.hands};
     this.model.updateMatrixWorld(true);this.suppress=false;
     if(update){this.update(true);this.syncGizmo();}
-    if(restoreView&&this.camera&&this.orbit){if(doc.camera)this.restoreObservation(doc.camera.active,doc.camera.view);else this.setView('free',false);this.orbit.enabled=!this.cameraState.locked;if(update&&this.ready)this.onInfo(this.info());}
+    if(restoreView&&this.camera&&this.orbit){if(doc.camera)this.restoreObservation(doc.camera.active,doc.camera.view);else this.setView('free',false);this.orbit.enabled=this.canNavigateCamera();if(update&&this.ready)this.onInfo(this.info());}
   }
   commit(){if(!this.ready)return;this.fit(false);this.onInfo(this.info());this.onCommit(this.snapshot());}
 
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
-    return {ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),warning:this.warning,hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
+    return {ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),warning:this.warning,hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
   }
 
   private update(fit:boolean){
@@ -598,7 +612,7 @@ export class PoseEngine {
   private commitCamera(){
     if(!this.ready||this.suppress)return;this.cameraState=this.getCameraSettings();this.onInfo(this.info());this.onCommit(this.snapshot(),false);
   }
-  setCameraLock(locked:boolean){this.fly?.stop();this.cameraState.locked=locked;this.orbit.enabled=!locked&&!this.transform.dragging;this.commitCamera();}
+  setCameraLock(locked:boolean){this.fly?.stop();this.cameraState.locked=locked;this.orbit.enabled=this.canNavigateCamera()&&!this.transform.dragging;this.commitCamera();}
   setFramingLock(locked:boolean){if(!locked)this.cameraState.framing.locked=false;this.fit(false);this.cameraState.framing={locked,center:asVec(this.center),verticalSpan:this.span};if(!this.cameraState.locked&&this.view!=='free')this.setView(this.view,false);this.commitCamera();}
   reframe(){this.fit(false,true);this.cameraState.framing.center=asVec(this.center);this.cameraState.framing.verticalSpan=this.span;if(!this.cameraState.locked&&this.view!=='free')this.setView(this.view,false);this.commitCamera();}
   setOutputSize(width:number,height:number){

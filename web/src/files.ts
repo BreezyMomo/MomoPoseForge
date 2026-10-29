@@ -9,6 +9,7 @@ import {controlnetRecipe} from './controlnetWorkflow';
 import runnerSource from '../../tools/run-controlnet.py?raw';
 import requirementsSource from '../../tools/requirements-controlnet.txt?raw';
 import {validateCameraSettings,validOutputSize} from './cameraState';
+import {validateReferenceImage} from './referenceImage';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -36,6 +37,7 @@ export function parseDocument(text:string,rest:PoseDocument):PoseDocument{
   if(!record(d.hands)||!['张手','握拳','指向','自定义'].includes(d.hands.Left)||!['张手','握拳','指向','自定义'].includes(d.hands.Right)||typeof d.ground!=='boolean')throw new Error('手型或地面设置无效');
   if(d.fullBody!==undefined&&typeof d.fullBody!=='boolean')throw new Error('全身联动设置无效');
   if(d.camera!==undefined&&!validateCameraSettings(d.camera))throw new Error('相机书签、画幅或构图设置无效');
+  if(d.referenceImage!==undefined&&!validateReferenceImage(d.referenceImage))throw new Error('参考图片或放置设置无效，当前工程未改变');
   return structuredClone(d);
 }
 
@@ -89,7 +91,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       const recipe=controlnetRecipe(slots.map(s=>s.id),options,options.scope==='current'&&engine.handDetail?{side:engine.handDetail,shape:engine.hands[engine.handDetail]}:undefined,{width:w,height:h});
       zip.file('workflow-controlnet.json',JSON.stringify(recipe,null,2));zip.file('tools/run-controlnet.py',runnerSource);zip.file('tools/requirements-controlnet.txt',requirementsSource);zip.file('workflows/controlnet-models.json',JSON.stringify(recipe.models,null,2));
     }
-    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.3.0',exportVersion:2,projectVersion:1,rig:doc.rig,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18 + 2 x HAND21',pointOrder:{body:BODY_NAMES,hand:HAND_NAMES},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
+    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.4.0',exportVersion:2,projectVersion:1,referenceImage:{rendered:false,embeddedInProject:!!doc.referenceImage&&options.project},rig:doc.rig,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18 + 2 x HAND21',pointOrder:{body:BODY_NAMES,hand:HAND_NAMES},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
     zip.file('README.txt',[
       'MomoPoseForge 姿态导出 v2','',
       '每个视角：mannequin.png 是素体参考；openpose-body-hands.png 是身体 COCO18 + 双手各21点的黑底骨架控制图。',
@@ -102,9 +104,14 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       '本地复现：解压本 ZIP，在解压目录中创建 Python 虚拟环境，安装匹配显卡的 CUDA PyTorch，再 pip install -r tools/requirements-controlnet.txt；运行 python tools/run-controlnet.py 原ZIP路径 --ablation。首次运行下载约5GB公开模型，需要CUDA显卡。',
       '可用 --view 选择视角、--prompt 修改人物/服装描述、--seed 固定随机种子；--model-cache 指定模型缓存。已有模型时加 --offline。直接使用控制图，不要再做姿态/深度/法线估计。',
       '真实生成仍取决于所选模型和权重；X Bot 分段几何会进入深度/法线图，独立生成不同视角不会自动保证角色身份一致。',
+      '参考图片为视口叠加层，不进入任何 PNG、深度、法线或关键点；如勾选工程，图片内嵌在 project.pose.json 中，可随工程恢复。',
       'project.pose.json 可重新打开编辑；contact-sheet.png 只用于整组查看，单视角工作流使用该视角目录内的独立图。',
       '角色资产：Adobe Mixamo X Bot，https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html 。','',
     ].join('\n'));
     onProgress('正在打包文件');check();const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},()=>check());check();download(blob,`${safeName(doc.name)}.zip`);
-  }finally{engine.apply(doc);}
+  }finally{
+    // Rendering does not edit the pose. Re-applying an unchanged snapshot would
+    // unnecessarily project joint limits again and introduce floating-point drift.
+    if(JSON.stringify(engine.snapshot())!==JSON.stringify(doc))engine.apply(doc);
+  }
 }

@@ -1,0 +1,147 @@
+{
+  "imageAspectChecks": [
+    {
+      "display": [
+        304.484375,
+        456.734375
+      ],
+      "name": "portrait",
+      "natural": [
+        600,
+        900
+      ],
+      "opacity": "0.4",
+      "pointerEvents": "none"
+    },
+    {
+      "name": "landscape",
+      "display": [
+        759.3125,
+        379.65625
+      ],
+      "natural": [
+        1200,
+        600
+      ],
+      "opacity": "0.4",
+      "pointerEvents": "none"
+    },
+    {
+      "name": "square",
+      "display": [
+        456.734375,
+        456.734375
+      ],
+      "natural": [
+        800,
+        800
+      ],
+      "opacity": "0.4",
+      "pointerEvents": "none"
+    },
+    {
+      "name": "large-alpha",
+      "display": [
+        304.578125,
+        456.734375
+      ],
+      "natural": [
+        1067,
+        1600
+      ],
+      "opacity": "0.4",
+      "pointerEvents": "none"
+    }
+  ],
+  "outputAspectChecks": [
+    {
+      "height": 456.734375,
+      "name": "参考图 portrait.png",
+      "naturalHeight": 900,
+      "naturalWidth": 600,
+      "preset": "竖幅 · 3:4 · 768 × 1024",
+      "width": 304.484375
+    },
+    {
+      "height": 456.734375,
+      "name": "参考图 portrait.png",
+      "naturalHeight": 900,
+      "naturalWidth": 600,
+      "preset": "横幅 · 4:3 · 1024 × 768",
+      "width": 304.484375
+    },
+    {
+      "height": 379.65625,
+      "name": "参考图 landscape.jpg",
+      "naturalHeight": 600,
+      "naturalWidth": 1200,
+      "preset": "竖幅 · 3:4 · 768 × 1024",
+      "width": 759.3125
+    },
+    {
+      "height": 379.65625,
+      "name": "参考图 landscape.jpg",
+      "naturalHeight": 600,
+      "naturalWidth": 1200,
+      "preset": "横幅 · 4:3 · 1024 × 768",
+      "width": 759.3125
+    },
+    {
+      "height": 456.734375,
+      "name": "参考图 square.webp",
+      "naturalHeight": 800,
+      "naturalWidth": 800,
+      "preset": "竖幅 · 3:4 · 768 × 1024",
+      "width": 456.734375
+    },
+    {
+      "height": 456.734375,
+      "name": "参考图 square.webp",
+      "naturalHeight": 800,
+      "naturalWidth": 800,
+      "preset": "横幅 · 4:3 · 1024 × 768",
+      "width": 456.734375
+    }
+  ],
+  "responsiveChecks": [
+    {
+      "height": 844,
+      "image": {
+        "height": 423.9375,
+        "width": 317.953125
+      },
+      "inspectorOpen": false,
+      "lockButton": {
+        "bottom": 608,
+        "height": 17,
+        "left": 195.5,
+        "right": 269.5,
+        "top": 591,
+        "width": 74,
+        "x": 195.5,
+        "y": 591
+      },
+      "scrollWidth": 390,
+      "width": 390
+    },
+    {
+      "height": 1024,
+      "inspectorWidth": 278,
+      "scrollWidth": 768,
+      "width": 768
+    },
+    {
+      "height": 900,
+      "inspectorWidth": 278,
+      "scrollWidth": 1440,
+      "width": 1440
+    }
+  ],
+  "immediateReload": true,
+  "corruptResourceRecovery": true,
+  "lockedReferenceDrag": {
+    "bodyChanged": true,
+    "referenceIdentical": true,
+    "cameraIdentical": true
+  }
+}

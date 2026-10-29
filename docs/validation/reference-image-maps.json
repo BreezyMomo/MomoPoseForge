@@ -1,0 +1,16 @@
+{
+  "source": "参考图无污染复核.zip",
+  "verification": "web/scripts/verify-export.mjs and web/scripts/verify-control-maps.mjs",
+  "views": 5,
+  "files": 49,
+  "width": 1024,
+  "height": 1024,
+  "keypointMaximumErrorPixels": 0.0004997040240368733,
+  "samples": 599,
+  "maximumDepthByteError": 0.5453517727486314,
+  "maximumNormalByteError": 0.5607215059006023,
+  "maximumHandProjectionErrorPixels": 0.0004990178053958516,
+  "maximumWorldErrorMetres": 0,
+  "handVisibilityMismatches": 0,
+  "surfaceSamplesByView": {"front":113,"oblique":117,"side":125,"high":124,"low":120}
+}
