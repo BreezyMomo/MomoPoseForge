@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {inPresetScope,type PresetScope} from './presetScopes';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -505,7 +506,11 @@ export class PoseEngine {
   copyHand(source:Side){const target=source==='Left'?'Right':'Left';this.applyHandGesture(target,this.captureHand(source),this.hands[source]);}
   resetSelected(){const rest=this.rest.joints[this.selected];if(!rest)return;const baseline=this.snapshot();this.bones[this.selected].quaternion.fromArray(rest.quaternion);this.bones[this.selected].position.fromArray(rest.position);this.markCustomHand(this.selected);delete this.pins[this.selected as Effector];this.bones[this.selected].updateWorldMatrix(false,true);this.solvePins();this.keepPinnedPose(baseline);this.syncTargets();this.update(true);this.syncGizmo();this.commit();}
 
-  applyPreset(preset:Preset,commit=true){
+  applyPreset(preset:Preset,commit=true,scope:PresetScope='all'){
+    // Refuse conflicting contacts before changing anything. Untouched pins stay fixed.
+    if(scope!=='all'&&Object.keys(this.pins).some(end=>scope==='lower'||scope==='upper'&&end.endsWith('Hand')))
+      throw new Error(scope==='lower'?'下半身包含骨盆，会带动全身；请先解除固定的手脚':'请先解除手部固定，再套用上半身姿势');
+    const before=scope==='all'?null:this.snapshot();
     const views=this.views,name=this.name,fullBody=this.fullBody;
     this.apply(this.rest,false,false);this.views=views;this.fullBody=fullBody;this.name=commit?preset.name:name;
     this.pins={};this.ground=preset.ground??true;this.warning='';
@@ -528,6 +533,23 @@ export class PoseEngine {
       if(end.endsWith('Foot'))this.setWorldQuaternion(this.bones[end],new Q());
     }
     this.applyHandShape('Left',preset.handShape??'张手');this.applyHandShape('Right',preset.handShape??'张手');
+    if(before){
+      // Transfer local joint transforms so a standing arm preset also works seated.
+      // Restore directly to leave every excluded joint bit-for-bit unchanged.
+      for(const [name,joint] of Object.entries(before.joints))if(!inPresetScope(name,scope)){
+        this.bones[name].position.fromArray(joint.position);this.bones[name].quaternion.fromArray(joint.quaternion);
+      }
+      this.model.position.fromArray(before.root.position);this.model.quaternion.fromArray(before.root.quaternion);
+      this.name=before.name;this.hands={...before.hands};this.pins=structuredClone(before.pins);
+      if(scope!=='lower')this.ground=before.ground;
+      this.targets=structuredClone(before.targets);this.poles=structuredClone(before.poles);
+      this.model.updateMatrixWorld(true);
+      for(const end of END_EFFECTORS)if(scope==='lower'||scope==='upper'&&end.endsWith('Hand')){
+        this.targets[end]=asVec(this.world(end));
+        this.poles[end]=asVec(this.world(CHAINS[end][1]));
+      }
+      this.warning='';
+    }
     this.update(true);this.syncGizmo();if(commit)this.commit();
   }
 
@@ -677,7 +699,7 @@ export class PoseEngine {
     slot.azimuth=THREE.MathUtils.radToDeg(Math.atan2(direction.x,direction.z));slot.elevation=THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(Math.asin(direction.y)),-89,89);this.fit(false);this.commitCamera();
   }
   resetViews(){this.views=structuredClone(DEFAULT_VIEWS);this.fit(false);this.commitCamera();}
-  focus(){if(this.cameraState?.locked)return;this.fit(false);this.setView(this.view);}
+  focus(){if(this.handDetail)this.setHandDetail(null);if(this.cameraState?.locked)return;this.fit(false);this.setView(this.view);}
 
   cocoWorld(){
     const head=this.bones.Head;

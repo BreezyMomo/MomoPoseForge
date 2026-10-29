@@ -6,6 +6,7 @@ import {PoseEngine} from './PoseEngine';
 import {captureCamera,restoreCamera,defaultCameraSettings,validateCameraSettings} from './cameraState';
 import {parseDocument} from './files';
 import {PRESETS} from './presets';
+import {inPresetScope} from './presetScopes';
 import {END_EFFECTORS,DEFAULT_VIEWS} from './types';
 import {generationSize,controlnetRecipe} from './controlnetWorkflow';
 import profile from '../public/models/xbot-profile.json';
@@ -23,7 +24,75 @@ async function fixture(){
   e.rest=e.snapshot();e.ready=true;e.applyPreset(PRESETS[0],false);e.focus();return e;
 }
 const matrix=(e:PoseEngine)=>e.camera.matrixWorld.toArray();
+describe('局部姿势套用',()=>{
+  for(const scope of ['upper','lower','head'] as const)it(`${scope}仅替换指定关节，保留工程、镜头、手型和其他部位`,async()=>{
+    const e=await fixture(),source=await fixture();
+    e.applyPreset(PRESETS.find(p=>p.id==='sit')!);
+    e.setHand('Left','握拳');e.setHand('Right','V 手势');e.setSelectedRotation(1,20);
+    e.name='坐着挥手';e.model.position.set(.3,.1,-.4);e.model.quaternion.setFromAxisAngle(new Vector3(0,1,0),.6);
+    e.setReferenceImage(referenceFixture());e.saveCameraBookmark('观察');e.setFramingLock(true);e.setCameraLock(true);
+    const before=e.snapshot();
+    for(const preset of PRESETS){
+      e.apply(before);const baseline=e.snapshot();source.applyPreset(preset);const expected=source.snapshot();
+      vi.mocked(e.onCommit).mockClear();e.applyPreset(preset,true,scope);const after=e.snapshot();
+      for(const [name,joint] of Object.entries(baseline.joints))expect(after.joints[name],`${preset.id}:${name}`).toEqual(inPresetScope(name,scope)?expected.joints[name]:joint);
+      expect(after.root).toEqual(before.root);expect(after.name).toBe(before.name);expect(after.hands).toEqual(before.hands);
+      expect(after.camera).toEqual(before.camera);expect(after.referenceImage).toEqual(before.referenceImage);expect(after.fullBody).toBe(before.fullBody);
+      expect(after.ground).toBe(scope==='lower'?expected.ground:before.ground);
+      expect(e.onCommit).toHaveBeenCalledTimes(1);expect(vi.mocked(e.onCommit).mock.calls[0][0]).toEqual(after);
+      for(const end of END_EFFECTORS){
+        if(scope==='lower'||scope==='upper'&&end.endsWith('Hand'))expect(after.targets[end]).toEqual(e.world(end).toArray());
+        else {expect(after.targets[end]).toEqual(before.targets[end]);expect(after.poles[end]).toEqual(before.poles[end]);}
+      }
+    }
+  });
+  it('坐姿套用挥手保留双脚世界位置和骨盆高度，之后撤销、重做、工程往返可恢复',async()=>{
+    const e=await fixture();e.applyPreset(PRESETS.find(p=>p.id==='sit')!);e.setFeetPin(true);
+    const before=e.snapshot(),feet=END_EFFECTORS.filter(end=>end.endsWith('Foot')).map(end=>e.world(end)),hand=e.world('LeftHand');
+    e.applyPreset(PRESETS.find(p=>p.id==='wave')!,true,'upper');const after=e.snapshot();
+    expect(after.pins).toEqual(before.pins);expect(after.joints.Hips).toEqual(before.joints.Hips);
+    for(const [i,end] of ['LeftFoot','RightFoot'].entries())expect(e.world(end).distanceTo(feet[i])).toBeLessThan(1e-12);
+    expect(e.world('LeftHand').distanceTo(hand)).toBeGreaterThan(.3);
+    for(const document of [before,after,parseDocument(JSON.stringify(after),e.rest)]){
+      e.apply(document,true,false);for(const [name,joint] of Object.entries(document.joints))expect(e.bones[name].quaternion.angleTo(new Quaternion().fromArray(joint.quaternion))).toBeLessThan(1e-7);
+      expect(e.snapshot().pins).toEqual(document.pins);
+    }
+  });
+  it('下半身套用正坐会降低骨盆并弯腿；头部套用回头不替换已有躯干',async()=>{
+    const e=await fixture();e.applyPreset(PRESETS.find(p=>p.id==='wave')!);const before=e.snapshot();
+    e.applyPreset(PRESETS.find(p=>p.id==='sit')!,true,'lower');const seated=e.snapshot();
+    expect(seated.joints.Hips.position[1]).toBeCloseTo(before.joints.Hips.position[1]-.44);
+    expect(seated.joints.LeftLeg.quaternion).not.toEqual(before.joints.LeftLeg.quaternion);
+    for(const name of ['Spine','Spine1','Chest','LeftArm','LeftForeArm','RightArm','Head'])expect(seated.joints[name]).toEqual(before.joints[name]);
+    e.applyPreset(PRESETS.find(p=>p.id==='turn')!,true,'head');const turned=e.snapshot();
+    expect(turned.joints.Head.quaternion).not.toEqual(seated.joints.Head.quaternion);
+    for(const name of ['Hips','Spine','Spine1','Chest','LeftArm','LeftLeg','RightLeg'])expect(turned.joints[name]).toEqual(seated.joints[name]);
+  });
+  for(const [scope,pin] of [['upper','LeftHand'],['lower','LeftHand'],['lower','RightFoot']] as const)it(`${scope}与${pin}固定冲突时不改变姿势、不产生历史`,async()=>{
+    const e=await fixture();e.select(pin);e.setPin(true,true);const before=e.snapshot();vi.mocked(e.onCommit).mockClear();
+    expect(()=>e.applyPreset(PRESETS[15],true,scope)).toThrow('解除');expect(e.snapshot()).toEqual(before);expect(e.onCommit).not.toHaveBeenCalled();
+  });
+  it('头部套用保留所有手脚固定；全身套用仍替换手型并释放固定',async()=>{
+    const e=await fixture();for(const end of END_EFFECTORS){e.select(end);e.setPin(true,true);}const before=e.snapshot();
+    e.applyPreset(PRESETS.find(p=>p.id==='turn')!,true,'head');expect(e.snapshot().pins).toEqual(before.pins);
+    e.applyPreset(PRESETS.find(p=>p.id==='run')!);expect(e.name).toBe('跑步定格');expect(e.hands).toEqual({Left:'握拳',Right:'握拳'});expect(e.pins).toEqual({});
+  });
+});
 describe('相机、工程与五视图构图',()=>{
+  for(const side of ['Left','Right'] as const)it(`${side}手部精调后聚焦人体恢复全身控制、镜头并保留姿势`,async()=>{
+    const e=await fixture(),before=e.snapshot().joints;
+    e.setHandDetail(side);e.focusHand(side);
+    const distance=e.camera.position.distanceTo(e.orbit.target);
+    expect(e.handDetail).toBe(side);expect(distance).toBeCloseTo(.52);
+    e.focus();
+    expect(e.handDetail).toBeNull();expect(e.selected).toBe(`${side}Hand`);expect(e.mode).toBe('translate');
+    expect(e.camera.position.distanceTo(e.orbit.target)).toBeGreaterThan(distance*3);
+    expect(e.snapshot().joints).toEqual(before);
+  });
+  it('手部近景中锁定相机后仍可退出精调，同时保留镜头锁定',async()=>{
+    const e=await fixture();e.setHandDetail('Left');e.focusHand('Left');e.setCameraLock(true);const camera=e.getCameraSettings();
+    e.focus();expect(e.handDetail).toBeNull();expect(e.selected).toBe('LeftHand');expect(e.getCameraSettings()).toEqual(camera);
+  });
   it('参考图片只写入工程元数据，不加入场景，也不改变骨骼、相机或构图',async()=>{
     const e=await fixture(),before=e.snapshot(),children=[...e.model.children];e.setReferenceImage(referenceFixture());e.setReferenceSettings({opacity:.3,scale:1.5,offsetX:.2,offsetY:-.1});
     const after=e.snapshot();expect(after.joints).toEqual(before.joints);expect(after.camera).toEqual(before.camera);expect(e.model.children).toEqual(children);expect(after.referenceImage?.scale).toBe(1.5);expect(vi.mocked(e.onCommit).mock.calls.at(-1)?.[1]).toBe(false);
