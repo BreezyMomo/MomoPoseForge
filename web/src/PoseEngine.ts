@@ -264,7 +264,7 @@ export class PoseEngine {
   setSelectedPosition(axis:number,value:number){
     if(!this.canTranslate()||!Number.isFinite(value)||Math.abs(value)>10)return;
     this.gizmo.position.copy(this.world(this.selected));this.gizmo.position.setComponent(axis,value);
-    this.mode='translate';this.transform.setMode('translate');this.manipulate();this.update(true);this.commit();
+    this.mode='translate';this.transform.setMode('translate');this.manipulate();this.update(true);this.syncGizmo();this.commit();
   }
   setSelectedRotation(axis:number,value:number){
     if(!Number.isFinite(value))return;

@@ -48,6 +48,12 @@ describe('实际控制器的连续拖动回归',()=>{
     engine.select('LeftHand');expect(engine.mode).toBe('translate');
     engine.select('Head');engine.select('RightFoot');expect(engine.mode).toBe('translate');
   });
+  it('位置输入超过可达范围后，操纵器回到实际关节位置',()=>{
+    const engine=makeEngine();Object.assign(engine,{ready:true,update(){},fit(){},onInfo(){},onCommit(){}});
+    engine.setSelectedPosition(0,.35);
+    expect(engine.world('Chest').x).toBeLessThan(.1);
+    expect(engine.gizmo.position.distanceTo(engine.world('Chest'))).toBeLessThan(1e-9);
+  });
   it('一次拖动中绕行再回到同一目标，结果与直接移动一致',()=>{
     const a=makeEngine(),b=makeEngine(),pivot=a.world('Spine');
     Object.assign(a,{dragBefore:a.snapshot()});Object.assign(b,{dragBefore:b.snapshot()});
