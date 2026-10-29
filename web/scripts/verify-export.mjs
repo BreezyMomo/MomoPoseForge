@@ -25,5 +25,5 @@ for(const view of manifest.views){
   for(const name of ['mannequin.png','openpose-coco18.png']){const png=await zip.file(`${view.id}/${name}`).async('nodebuffer');assert.equal(png.readUInt32BE(16),manifest.width);assert.equal(png.readUInt32BE(20),manifest.height);}
 }
 assert.ok(maxError<.001,'PNG camera projection and exported keypoints must agree');
-assert.equal(manifest.views.length,5);
+assert.equal(manifest.views.length,manifest.views[0].id==='current'?1:5);
 console.log(JSON.stringify({views:manifest.views.length,files:Object.values(zip.files).filter(f=>!f.dir).length,width:manifest.width,height:manifest.height,keypointMaximumErrorPixels:maxError},null,2));

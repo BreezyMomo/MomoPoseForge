@@ -2,6 +2,7 @@ import type { PoseDocument, ViewSlot } from './types';
 import { END_EFFECTORS, DEFAULT_VIEWS } from './types';
 import type { PoseEngine } from './PoseEngine';
 import { CURRENT_MODEL } from './rig';
+import {PerspectiveCamera} from 'three';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -45,11 +46,11 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
   try{
     for(let i=0;i<slots.length;i++){
       check();onProgress(`正在生成${slots[i].name} · ${i+1}/${slots.length}`);
-      const slot=slots[i],camera=engine.viewCamera(slot,w/h);
-      if(options.surface||options.sheet){const canvas=engine.renderImage(slot,w,h,'surface',options.transparent);images.push(canvas);if(options.surface)zip.file(`${slot.id}/mannequin.png`,await toBlob(canvas));}
-      if(options.skeleton)zip.file(`${slot.id}/openpose-coco18.png`,await toBlob(engine.renderImage(slot,w,h,'skeleton')));
+      const slot=slots[i],camera=options.scope==='current'?engine.exportCamera(w/h):engine.viewCamera(slot,w/h);
+      if(options.surface||options.sheet){const canvas=engine.renderImage(slot,w,h,'surface',options.transparent,camera);images.push(canvas);if(options.surface)zip.file(`${slot.id}/mannequin.png`,await toBlob(canvas));}
+      if(options.skeleton)zip.file(`${slot.id}/openpose-coco18.png`,await toBlob(engine.renderImage(slot,w,h,'skeleton',false,camera)));
       if(options.keypoints)zip.file(`${slot.id}/keypoints-coco18.json`,JSON.stringify({version:1.3,people:[{person_id:[-1],pose_keypoints_2d:engine.keypoints(camera,w,h),face_keypoints_2d:[],hand_left_keypoints_2d:[],hand_right_keypoints_2d:[],pose_keypoints_3d:[],face_keypoints_3d:[],hand_left_keypoints_3d:[],hand_right_keypoints_3d:[]}]},null,2));
-      manifestViews.push({...slot,projection:'orthographic',worldMatrix:camera.matrixWorld.toArray(),projectionMatrix:camera.projectionMatrix.toArray()});
+      manifestViews.push({...slot,projection:camera instanceof PerspectiveCamera?'perspective':'orthographic',worldMatrix:camera.matrixWorld.toArray(),projectionMatrix:camera.projectionMatrix.toArray()});
       await new Promise(r=>setTimeout(r,0));
     }
     check();

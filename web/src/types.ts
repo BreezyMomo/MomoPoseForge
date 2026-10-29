@@ -35,7 +35,7 @@ export const PART_NAMES: Record<string, string> = {
   RightUpLeg: '右髋', RightLeg: '右膝', RightFoot: '右脚',
 };
 export type EngineInfo = {
-  ready: boolean; view: string; selected: string; position: Vec3; rotation: Vec3;
+  ready: boolean; view: string; navigating:boolean; selected: string; position: Vec3; rotation: Vec3;
   pinned: boolean; orientationPinned: boolean; ground: boolean; warning: string;
   hands: { Left: string; Right: string }; boneCount: number; vertexCount: number;
 };

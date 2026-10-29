@@ -6,6 +6,7 @@ import { solveTwoBone, solveLimbRotations, projectPoint } from './math';
 import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
 import { CURRENT_MODEL } from './rig';
 import {JOINT_LIMITS,constrainJointRotation,solveSpineTarget} from './poseControls';
+import {FlyCameraControls,perspectiveForNavigation,cloneExportCamera} from './FlyCameraControls';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
@@ -22,6 +23,7 @@ export class PoseEngine {
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
   orbit: OrbitControls;
   transform: TransformControls;
+  fly: FlyCameraControls;
   model = new THREE.Group();
   bones: Record<string, THREE.Bone> = {};
   helpers = new THREE.Group();
@@ -51,6 +53,8 @@ export class PoseEngine {
   disposed = false;
   private resizeObserver: ResizeObserver;
   private frame = 0;
+  private lastFrame = 0;
+  private navigationDistance = 1;
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
   private dragBefore: PoseDocument | null = null;
@@ -71,6 +75,7 @@ export class PoseEngine {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.setAttribute('aria-label', '可交互的三维人体姿势视口');
+    this.renderer.domElement.tabIndex=0;
     this.host.appendChild(this.renderer.domElement);
     this.camera = new THREE.PerspectiveCamera(35, 1, .01, 100);
     this.camera.position.set(2.6,1.65,4.5);
@@ -78,7 +83,7 @@ export class PoseEngine {
     this.orbit.target.copy(this.center);
     this.orbit.enableDamping = false;
     this.orbit.minDistance = .5; this.orbit.maxDistance = 12;
-    this.orbit.mouseButtons = { LEFT: undefined, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+    this.orbit.mouseButtons = { LEFT: undefined, MIDDLE: THREE.MOUSE.PAN, RIGHT: undefined };
     this.orbit.addEventListener('start', () => { this.view = 'free'; if(this.ready)this.onInfo(this.info()); });
     this.scene.add(new THREE.HemisphereLight('#ffffff', '#757575', 2));
     const key = new THREE.DirectionalLight('#fff9ef', 3.4);
@@ -107,9 +112,20 @@ export class PoseEngine {
     });
     this.transform.addEventListener('objectChange', () => { if (!this.suppress && this.ready) this.manipulate(); });
     this.renderer.domElement.addEventListener('pointerdown', this.pointerDown);
+    this.fly=new FlyCameraControls(this.renderer.domElement,()=>this.camera,()=>this.syncNavigationTarget(),active=>{
+      if(active){
+        if(this.transform.dragging)return false;
+        if(this.camera instanceof THREE.OrthographicCamera){this.camera=perspectiveForNavigation(this.camera,this.orbit.target);this.orbit.object=this.camera;this.transform.camera=this.camera;}
+        this.navigationDistance=this.camera.position.distanceTo(this.orbit.target);
+        this.orbit.enabled=false;this.transform.enabled=false;this.view='free';
+      }else{this.syncNavigationTarget();this.transform.enabled=true;this.orbit.enabled=!this.transform.dragging;}
+      if(this.ready)this.onInfo(this.info());
+    });
     this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(this.host);
     this.resize(); this.animate();
   }
+
+  private syncNavigationTarget(){this.orbit.target.copy(this.camera.position).addScaledVector(this.camera.getWorldDirection(new V()),this.navigationDistance);}
 
   async load() {
     const [gltf, profile] = await Promise.all([
@@ -365,7 +381,7 @@ export class PoseEngine {
 
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
-    return {ready:this.ready,view:this.view,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,warning:this.warning,hands:{...this.hands},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount};
+    return {ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,warning:this.warning,hands:{...this.hands},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount};
   }
 
   private update(fit:boolean){
@@ -397,6 +413,7 @@ export class PoseEngine {
     cam.position.set(Math.sin(a)*Math.cos(e)*5,Math.sin(e)*5,Math.cos(a)*Math.cos(e)*5).add(this.center);cam.lookAt(this.center);cam.updateMatrixWorld();return cam;
   }
   setView(id:string){
+    this.fly?.stop();
     const aspect=this.host.clientWidth/Math.max(1,this.host.clientHeight),slot=this.views.find(v=>v.id===id);
     this.view=id;
     if(slot)this.camera=this.viewCamera(slot,aspect);
@@ -420,9 +437,9 @@ export class PoseEngine {
     camera.updateMatrixWorld();return this.cocoWorld().flatMap(p=>{const point=projectPoint(p,camera,width,height);return point.valid?[Number(point.x.toFixed(3)),Number(point.y.toFixed(3)),1]:[0,0,0];});
   }
 
-  renderImage(slot:ViewSlot,width:number,height:number,kind:'surface'|'skeleton',transparent=false):HTMLCanvasElement{
+  renderImage(slot:ViewSlot,width:number,height:number,kind:'surface'|'skeleton',transparent=false,viewCamera?:THREE.Camera):HTMLCanvasElement{
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d')!;
-    const camera=this.viewCamera(slot,width/height);
+    const camera=viewCamera??this.viewCamera(slot,width/height);
     if(kind==='skeleton'){
       ctx.fillStyle='#000000';ctx.fillRect(0,0,width,height);const k=this.keypoints(camera,width,height);
       ctx.lineWidth=Math.max(2,height*.005);ctx.lineCap='round';
@@ -443,9 +460,10 @@ export class PoseEngine {
       this.scene.background=prev.background;this.model.visible=prev.model;this.helpers.visible=prev.helpers;this.transform.getHelper().visible=prev.gizmo;this.grid.visible=prev.grid;this.groundMesh.visible=prev.ground;this.boneDisplay.visible=prev.bones;this.renderer.setRenderTarget(prev.target);this.renderer.setClearAlpha(1);target.dispose();
     }
   }
-  renderCurrent(width:number,height:number,kind:'surface'|'skeleton',transparent=false){const direction=this.camera.position.clone().sub(this.orbit.target).normalize();return this.renderImage({id:'current',name:'当前视角',azimuth:THREE.MathUtils.radToDeg(Math.atan2(direction.x,direction.z)),elevation:THREE.MathUtils.radToDeg(Math.asin(direction.y))},width,height,kind,transparent);}
+  exportCamera(aspect:number){return cloneExportCamera(this.camera,aspect);}
+  renderCurrent(width:number,height:number,kind:'surface'|'skeleton',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
   getThumbnails(){return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,180,200,'surface').toDataURL('image/png')}));}
   resize(){const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{this.camera.left=-this.span*w/h/2;this.camera.right=this.span*w/h/2;this.camera.top=this.span/2;this.camera.bottom=-this.span/2;}this.camera.updateProjectionMatrix();}
-  private animate=()=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);this.orbit.update();this.renderer.render(this.scene,this.camera);};
-  dispose(){this.disposed=true;cancelAnimationFrame(this.frame);this.resizeObserver.disconnect();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.orbit.dispose();this.transform.dispose();this.scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Line){o.geometry.dispose();const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose());}});this.renderer.dispose();this.renderer.domElement.remove();}
+  private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(!this.fly.active)this.orbit.update();this.renderer.render(this.scene,this.camera);};
+  dispose(){this.disposed=true;cancelAnimationFrame(this.frame);this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.orbit.dispose();this.transform.dispose();this.scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Line){o.geometry.dispose();const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose());}});this.renderer.dispose();this.renderer.domElement.remove();}
 }
