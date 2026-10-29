@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import fs from 'node:fs';
-import {Bone,Group,Object3D,Vector3,PerspectiveCamera,OrthographicCamera,Quaternion} from 'three';
+import {Bone,Group,Object3D,Vector3,PerspectiveCamera,OrthographicCamera,Quaternion,Scene} from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {PoseEngine} from './PoseEngine';
 import {captureCamera,restoreCamera,defaultCameraSettings,validateCameraSettings} from './cameraState';
@@ -24,6 +24,55 @@ async function fixture(){
   e.rest=e.snapshot();e.ready=true;e.applyPreset(PRESETS[0],false);e.focus();return e;
 }
 const matrix=(e:PoseEngine)=>e.camera.matrixWorld.toArray();
+describe('道具场景与接触辅助',()=>{
+  it('道具上限与非法修改在产生历史前拦截，不改变人体、镜头或已有场景',async()=>{
+    const e=await fixture(),body=e.snapshot().joints,camera=e.getCameraSettings().active;
+    for(let i=0;i<12;i++)e.addProp('box');const before=e.snapshot();vi.mocked(e.onCommit).mockClear();
+    expect(()=>e.addProp('chair')).toThrow('最多');expect(e.snapshot()).toEqual(before);expect(e.onCommit).not.toHaveBeenCalled();
+    expect(e.snapshot().joints).toEqual(body);expect(e.getCameraSettings().active).toEqual(camera);
+  });
+  it('添加、编辑、隐藏、移除、撤销和工程恢复均同步真实场景，旧工程会清空道具',async()=>{
+    const e=await fixture();e.scene=new Scene();const old=e.snapshot(),id=e.addProp('chair');
+    e.changeProp(id,{position:[.4,0,-.2],yaw:35,size:[.6,.5,.5]});const saved=e.snapshot();
+    expect(e.propLayer?.children).toHaveLength(1);expect(e.propLayer!.children[0].position.toArray()).toEqual([.4,0,-.2]);
+    e.changeProp(id,{visible:false});expect(e.propLayer?.children).toHaveLength(0);expect(e.snapshot().props?.[0].visible).toBe(false);
+    e.removeProp(id);expect(e.snapshot().props).toBeUndefined();
+    e.apply(saved,true,false);expect(e.propLayer?.children).toHaveLength(1);expect(e.snapshot().props).toEqual(saved.props);
+    e.apply(parseDocument(JSON.stringify(saved),e.rest));expect(e.snapshot().props).toEqual(saved.props);
+    e.apply(old);expect(e.propLayer?.children).toHaveLength(0);expect(e.snapshot().props).toBeUndefined();
+  });
+  it('全身和局部预设保留道具；场景构图和深度范围包含可见道具',async()=>{
+    const e=await fixture();e.scene=new Scene();const before=e.depthRange([e.camera]),id=e.addProp('table');
+    e.changeProp(id,{position:[0,0,-3]});const props=e.snapshot().props;
+    e.applyPreset(PRESETS[6]);e.applyPreset(PRESETS[15],true,'upper');expect(e.snapshot().props).toEqual(props);expect(e.propLayer?.children).toHaveLength(1);
+    expect(e.depthRange([e.camera]).far).toBeGreaterThan(before.far+1);
+    expect(e.sceneBounds().min.z).toBeLessThan(-3);
+    e.changeProp(id,{visible:false});expect(e.sceneBounds().min.z).toBeGreaterThan(-1);
+  });
+  it('手腕定位只改变对应手臂，保留手型和其他固定点，并记录一次历史',async()=>{
+    const e=await fixture();e.setHand('Left','V 手势');e.setFeetPin(true);const id=e.addProp('table'),point=e.world('LeftHand').add(new Vector3(.03,0,.04));
+    e.changeProp(id,{position:[point.x,0,point.z],size:[.5,point.y,.4]});const before=e.snapshot();vi.mocked(e.onCommit).mockClear();
+    e.placeOnProp(id,'center','LeftHand');const after=e.snapshot();
+    expect(e.world('LeftHand').distanceTo(point)).toBeLessThan(.01);expect(e.pins.LeftHand?.position).toEqual(e.world('LeftHand').toArray());
+    expect(after.hands).toEqual(before.hands);expect(after.pins.LeftFoot).toEqual(before.pins.LeftFoot);expect(after.pins.RightFoot).toEqual(before.pins.RightFoot);
+    for(const name of ['Hips','Spine','Head','RightArm','RightForeArm','LeftLeg','RightLeg','LeftIndex1'])expect(after.joints[name]).toEqual(before.joints[name]);
+    expect(e.onCommit).toHaveBeenCalledOnce();expect(e.selected).toBe('LeftHand');
+    e.apply(before,true,false);expect(e.pins.LeftHand).toBeUndefined();
+  });
+  it('脚底踩点考虑脚踝到地面的偏移，放平脚掌并固定朝向',async()=>{
+    const e=await fixture(),id=e.addProp('box'),foot=e.world('LeftFoot');e.changeProp(id,{position:[foot.x,0,foot.z],size:[.3,.1,.3]});
+    e.placeOnProp(id,'center','LeftFoot');expect(e.world('LeftFoot').y).toBeCloseTo(e.rest.targets.LeftFoot[1]+.1,2);
+    expect(e.bones.LeftFoot.getWorldQuaternion(new Quaternion()).angleTo(new Quaternion())).toBeLessThan(1e-7);expect(e.pins.LeftFoot?.orientation).toBe(true);
+  });
+  it('不可达、隐藏、缺失和已固定的定位请求不会破坏当前姿态或产生历史',async()=>{
+    const e=await fixture(),id=e.addProp('table');e.changeProp(id,{position:[4,0,4]});const before=e.snapshot();vi.mocked(e.onCommit).mockClear();
+    expect(()=>e.placeOnProp(id,'center','LeftHand')).toThrow('可达');expect(e.snapshot()).toEqual(before);expect(e.onCommit).not.toHaveBeenCalled();
+    expect(()=>e.placeOnProp(id,'unknown','LeftHand')).toThrow('接触点');
+    e.changeProp(id,{visible:false});expect(()=>e.placeOnProp(id,'center','LeftHand')).toThrow('可见');
+    e.changeProp(id,{visible:true});e.setPin(true);expect(()=>e.placeOnProp(id,'center','LeftHand')).toThrow('解除');
+    const saved=e.snapshot();expect(()=>e.changeProp(id,{size:[-1,1,1]})).toThrow('尺寸');expect(e.snapshot()).toEqual(saved);
+  });
+});
 describe('局部姿势套用',()=>{
   for(const scope of ['upper','lower','head'] as const)it(`${scope}仅替换指定关节，保留工程、镜头、手型和其他部位`,async()=>{
     const e=await fixture(),source=await fixture();

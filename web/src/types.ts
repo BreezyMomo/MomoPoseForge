@@ -2,6 +2,7 @@ export type Vec3 = [number, number, number];
 export type Quat = [number, number, number, number];
 import type {CameraSettings} from './cameraState';
 import type {ReferenceImage} from './referenceImage';
+import type {SceneProp} from './sceneProps';
 export const END_EFFECTORS = ['LeftHand', 'RightHand', 'LeftFoot', 'RightFoot'] as const;
 export type Effector = typeof END_EFFECTORS[number];
 export type ViewSlot = { id: string; name: string; azimuth: number; elevation: number };
@@ -22,6 +23,7 @@ export type PoseDocument = {
   hands: { Left: string; Right: string }; views: ViewSlot[]; ground: boolean; fullBody?:boolean;
   camera?:CameraSettings;
   referenceImage?:ReferenceImage;
+  props?:SceneProp[];
 };
 export type Preset = {
   id: string; name: string; category: string; description: string;
@@ -53,4 +55,5 @@ export type EngineInfo = {
   handDetail:Side|null; fingers:Record<Side,HandValues>; forearmTwist:Record<Side,number>; toes:Record<Side,number>;
   camera?:CameraSettings; framingWarning?:string;
   referenceImage?:ReferenceImage;
+  props?:SceneProp[];
 };
