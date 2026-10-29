@@ -4,11 +4,12 @@ import { PoseEngine } from './PoseEngine';
 import { PRESETS } from './presets';
 import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, type EngineInfo, type PoseDocument } from './types';
 import { exportPose, parseDocument, saveProject, type ExportOptions } from './files';
+import { CURRENT_MODEL } from './rig';
 import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
 
-const DRAFT_KEY='momo-pose-forge:draft:v1',LIBRARY_KEY='momo-pose-forge:library:v1';
+const DRAFT_KEY=`momo-pose-forge:draft:${CURRENT_MODEL.rig}`,LIBRARY_KEY=`momo-pose-forge:library:${CURRENT_MODEL.rig}`;
 type Thumbnail={id:string;name:string;url:string};
 type SavedPose={id:string;name:string;document:PoseDocument;thumbnail:string};
 const INITIAL_INFO:EngineInfo={ready:false,view:'free',selected:'LeftHand',position:[0,0,0],rotation:[0,0,0],pinned:false,orientationPinned:false,ground:true,warning:'',hands:{Left:'张手',Right:'张手'},boneCount:0,vertexCount:0};
@@ -119,7 +120,7 @@ export default function App(){
     <div className="mobile-tools"><button onClick={()=>{setLeftOpen(!leftOpen);setRightOpen(false);}}><Layers2 size={16}/>姿势库</button><span>姿势工作台</span><button onClick={()=>{setRightOpen(!rightOpen);setLeftOpen(false);}}><Settings2 size={16}/>部位</button></div>
     <div className="workspace">
       <aside className={`preset-panel ${leftOpen?'mobile-open':''}`} aria-label="姿势预设库">
-        <div className="panel-heading"><h2>姿势库</h2><span>人体 · 01</span></div>
+        <div className="panel-heading"><h2>姿势库</h2><span>X Bot · 01</span></div>
         <div className="panel-tabs"><button className={tab==='presets'?'selected':''} onClick={()=>setTab('presets')}>动作预设</button><button className={tab==='saved'?'selected':''} onClick={()=>setTab('saved')}>我的姿势{saved.length>0&&<span>{saved.length}</span>}</button></div>
         {tab==='presets'?<>
           <label className="search-input"><Search size={15}/><input aria-label="搜索姿势" placeholder="搜索动作或姿势" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button aria-label="清除搜索" onClick={()=>setQuery('')}><X size={13}/></button>}</label>
@@ -151,7 +152,7 @@ export default function App(){
         <section className="inspector-section"><div className="section-label"><h2>IK 与固定</h2><Bone size={14}/></div><label className={`setting-row ${!selectedEffector?'unavailable':''}`}><span>{info.pinned?<LockKeyhole size={14}/>:<UnlockKeyhole size={14}/>}固定当前手脚</span><input type="checkbox" role="switch" disabled={!selectedEffector} checked={info.pinned} onChange={e=>engineRef.current?.setPin(e.target.checked,info.orientationPinned)}/></label><label className="setting-row subsetting"><span>同时固定方向</span><input type="checkbox" disabled={!info.pinned} checked={info.orientationPinned} onChange={e=>engineRef.current?.setPin(true,e.target.checked)}/></label><p className="field-help">固定后移动骨盆，手脚保持在原位置。</p><label className="setting-row"><span>脚底地面约束</span><input type="checkbox" role="switch" checked={info.ground} onChange={e=>engineRef.current?.setGround(e.target.checked)}/></label><label className="setting-row"><span>更多身体控制点</span><input type="checkbox" role="switch" checked={more} onChange={e=>{setMore(e.target.checked);engineRef.current?.setMore(e.target.checked);}}/></label><p className="field-help">显示骨盆、胸腔、头部与肘膝控制。</p></section>
         <section className="inspector-section"><div className="section-label"><h2>手部姿态</h2><Hand size={14}/></div>{(['Left','Right'] as const).map(side=><div className="hand-row" key={side}><span>{side==='Left'?'左手':'右手'}</span><div className="hand-options">{['张手','握拳','指向'].map(shape=><button key={shape} className={info.hands[side]===shape?'selected':''} onClick={()=>engineRef.current?.setHand(side,shape)}>{shape}</button>)}</div></div>)}</section>
         <section className="inspector-section"><div className="section-label"><h2>对称编辑</h2><ArrowLeftRight size={14}/></div><div className="mirror-actions"><button onClick={()=>engineRef.current?.mirror('Left')}>左侧<ArrowUpRight size={12}/>右侧</button><button onClick={()=>engineRef.current?.mirror('Right')}>右侧<ArrowUpRight size={12}/>左侧</button></div><button className="save-pose-button" disabled={!info.ready} onClick={saveToLibrary}><Plus size={15}/>收藏当前姿势</button></section>
-        <div className="inspector-bottom"><span><span className="status-dot"/>人体素体 01</span><span>{info.ready?`${info.boneCount} 根骨骼 · 完整蒙皮`:'正在载入'}</span><a href="/models/ASSET.md" target="_blank" rel="noreferrer">MakeHuman · CC0<ArrowUpRight size={12}/></a></div>
+        <div className="inspector-bottom"><span><span className="status-dot"/>Mixamo X Bot</span><span>{info.ready?`${info.boneCount} 根骨骼 · 完整蒙皮`:'正在载入'}</span><a href={CURRENT_MODEL.sourceUrl} target="_blank" rel="noreferrer">模型来源与说明<ArrowUpRight size={12}/></a></div>
       </aside>
     </div>
     <footer className="statusbar"><span>MomoPoseForge<span className="version">v0.1</span></span><span><kbd>W</kbd>拖动<kbd>E</kbd>旋转<kbd>F</kbd>聚焦</span><span>人体姿态编辑 · 数据留在你的设备上</span></footer>
@@ -163,7 +164,7 @@ export default function App(){
       <div className="export-preview">{thumbnails.map(t=><div key={t.id}><img src={t.url} alt={t.name}/><span>{t.name}</span></div>)}</div>
       <fieldset disabled={exporting}><div className="export-layout"><div><h3>导出范围</h3><div className="choice-row"><button className={options.scope==='five'?'selected':''} onClick={()=>setOptions({...options,scope:'five'})}>完整五视图</button><button className={options.scope==='current'?'selected':''} onClick={()=>setOptions({...options,scope:'current'})}>当前视角</button></div></div><div><h3>单张分辨率</h3><select aria-label="导出分辨率" value={options.resolution} onChange={e=>setOptions({...options,resolution:Number(e.target.value) as 768|1536})}><option value={768}>768 × 1024</option><option value={1536}>1536 × 2048</option></select></div></div>
         <div className="export-section-label"><h3>文件内容</h3><button onClick={()=>setOptions({...options,surface:false,skeleton:true,keypoints:true,sheet:false,project:true})}>使用 AI 姿势控制方案<ChevronRight size={12}/></button></div>
-        <div className="export-checks">{([['surface','人体素体图','PNG · 灰色人体参考'],['skeleton','身体骨架图','PNG · 黑底 COCO18'],['keypoints','二维关节点','JSON · OpenPose COCO18'],['sheet','视图拼图','PNG · 便于整组查看'],['project','可编辑工程','JSON · 保留全部姿态与相机']] as const).map(([key,label,hint])=><label className="export-check" key={key}><input type="checkbox" checked={options[key]} onChange={e=>setOptions({...options,[key]:e.target.checked})}/><span>{label}<small>{hint}</small></span></label>)}</div><label className="setting-row export-transparent"><span>人体图使用透明背景</span><input type="checkbox" role="switch" checked={options.transparent} onChange={e=>setOptions({...options,transparent:e.target.checked})}/></label>
+        <div className="export-checks">{([['surface','人体素体图','PNG · X Bot 素体参考'],['skeleton','身体骨架图','PNG · 黑底 COCO18'],['keypoints','二维关节点','JSON · OpenPose COCO18'],['sheet','视图拼图','PNG · 便于整组查看'],['project','可编辑工程','JSON · 保留全部姿态与相机']] as const).map(([key,label,hint])=><label className="export-check" key={key}><input type="checkbox" checked={options[key]} onChange={e=>setOptions({...options,[key]:e.target.checked})}/><span>{label}<small>{hint}</small></span></label>)}</div><label className="setting-row export-transparent"><span>人体图使用透明背景</span><input type="checkbox" role="switch" checked={options.transparent} onChange={e=>setOptions({...options,transparent:e.target.checked})}/></label>
       </fieldset>
       <div className="dialog-footer"><span>{exporting?<><LoaderCircle size={14} className="spin"/>{progress}</>:<><LockKeyhole size={13}/>浏览器本地生成 ZIP</>}</span>{exporting?<button onClick={()=>exportAbort.current?.abort()}>取消导出</button>:<button className="primary-button" disabled={!Object.entries(options).some(([k,v])=>['surface','skeleton','keypoints','sheet','project'].includes(k)&&v)} onClick={()=>void runExport()}><Download size={16}/>生成并下载</button>}</div>
     </dialog>

@@ -1,0 +1,643 @@
+{
+  "id": "mixamo-xbot-v2",
+  "name": "Mixamo X Bot",
+  "version": 2,
+  "height": 1.7,
+  "forward": "+Z",
+  "up": "+Y",
+  "restRotation": "identity",
+  "handCurlNormalSign": -1,
+  "license": "Adobe Mixamo terms",
+  "hingeAxes": {
+    "LeftForeArm": [
+      0,
+      -1,
+      0
+    ],
+    "RightForeArm": [
+      0,
+      1,
+      0
+    ],
+    "LeftLeg": [
+      1,
+      0,
+      0
+    ],
+    "RightLeg": [
+      1,
+      0,
+      0
+    ]
+  },
+  "bones": {
+    "Hips": {
+      "parent": null,
+      "position": [
+        0,
+        0.9801397122587101,
+        0.019506977118514457
+      ]
+    },
+    "Spine": {
+      "parent": "Hips",
+      "position": [
+        8.676406516419479e-8,
+        1.0758059653065455,
+        0.02074276435608185
+      ]
+    },
+    "Spine1": {
+      "parent": "Spine",
+      "position": [
+        8.913130214057912e-8,
+        1.170550125684096,
+        0.011339217633841327
+      ]
+    },
+    "Chest": {
+      "parent": "Spine1",
+      "position": [
+        9.237997623134539e-8,
+        1.256053917414895,
+        -0.0015653934539328065
+      ]
+    },
+    "Neck": {
+      "parent": "UpperChest",
+      "position": [
+        9.833197765936202e-8,
+        1.4127009750261315,
+        -0.025207282564794906
+      ]
+    },
+    "Head": {
+      "parent": "Neck",
+      "position": [
+        9.434526181782166e-8,
+        1.5030707939303207,
+        -0.009374937532832127
+      ]
+    },
+    "HeadTop_End": {
+      "parent": "Head",
+      "position": [
+        8.823012466326909e-8,
+        1.6704621095177588,
+        0.014913607116400367
+      ]
+    },
+    "LeftEye": {
+      "parent": "Head",
+      "position": [
+        0.02882289253551634,
+        1.5632945893711632,
+        0.07785333428258771
+      ]
+    },
+    "RightEye": {
+      "parent": "Head",
+      "position": [
+        -0.028822607517217345,
+        1.5632945893711723,
+        0.07785327155752841
+      ]
+    },
+    "LeftShoulder": {
+      "parent": "UpperChest",
+      "position": [
+        0.042944000313866436,
+        1.3589025162221515,
+        -0.026257948840669926
+      ]
+    },
+    "LeftArm": {
+      "parent": "LeftShoulder",
+      "position": [
+        0.14246991157747066,
+        1.3539736862449685,
+        -0.04723094895607581
+      ]
+    },
+    "LeftForeArm": {
+      "parent": "LeftArm",
+      "position": [
+        0.40406883716358083,
+        1.353972963026151,
+        -0.04723059644685609
+      ]
+    },
+    "LeftHand": {
+      "parent": "LeftForeArm",
+      "position": [
+        0.6702465848217214,
+        1.3539729569108478,
+        -0.047230254833590224
+      ]
+    },
+    "LeftThumb1": {
+      "parent": "LeftHand",
+      "position": [
+        0.6934185134467273,
+        1.3391738500706982,
+        -0.022026304535978772
+      ]
+    },
+    "LeftThumb2": {
+      "parent": "LeftThumb1",
+      "position": [
+        0.7237658308526812,
+        1.3216534109995592,
+        -0.004505766708140713
+      ]
+    },
+    "LeftThumb3": {
+      "parent": "LeftThumb2",
+      "position": [
+        0.7486894016662327,
+        1.3072636366262815,
+        0.009883940377148261
+      ]
+    },
+    "LeftThumb4": {
+      "parent": "LeftThumb3",
+      "position": [
+        0.7670545832616276,
+        1.2966604508241195,
+        0.020487251450960437
+      ]
+    },
+    "LeftIndex1": {
+      "parent": "LeftHand",
+      "position": [
+        0.7558376932199544,
+        1.3491145180790018,
+        -0.025994606116577782
+      ]
+    },
+    "LeftIndex2": {
+      "parent": "LeftIndex1",
+      "position": [
+        0.7903812814992821,
+        1.3491146579408586,
+        -0.025994336107050674
+      ]
+    },
+    "LeftIndex3": {
+      "parent": "LeftIndex2",
+      "position": [
+        0.8174706232889063,
+        1.3491150847660627,
+        -0.025994742432408298
+      ]
+    },
+    "LeftIndex4": {
+      "parent": "LeftIndex3",
+      "position": [
+        0.8399527195922272,
+        1.3491155107100983,
+        -0.025994428241589262
+      ]
+    },
+    "LeftMiddle1": {
+      "parent": "LeftHand",
+      "position": [
+        0.7598224910237065,
+        1.3539728071624093,
+        -0.047230126800156536
+      ]
+    },
+    "LeftMiddle2": {
+      "parent": "LeftMiddle1",
+      "position": [
+        0.7945711006518879,
+        1.3539728029073503,
+        -0.04722996047805525
+      ]
+    },
+    "LeftMiddle3": {
+      "parent": "LeftMiddle2",
+      "position": [
+        0.8222980158249752,
+        1.3539723669954633,
+        -0.04722979794343033
+      ]
+    },
+    "LeftMiddle4": {
+      "parent": "LeftMiddle3",
+      "position": [
+        0.8489253427218154,
+        1.3539719307684848,
+        -0.04722988636194284
+      ]
+    },
+    "LeftRing1": {
+      "parent": "LeftHand",
+      "position": [
+        0.7557928179177229,
+        1.353560184133603,
+        -0.06475459029710716
+      ]
+    },
+    "LeftRing2": {
+      "parent": "LeftRing1",
+      "position": [
+        0.7854280804082349,
+        1.3535603212096732,
+        -0.06475450075479317
+      ]
+    },
+    "LeftRing3": {
+      "parent": "LeftRing2",
+      "position": [
+        0.8130305490562837,
+        1.3535600264710763,
+        -0.06475457211738814
+      ]
+    },
+    "LeftRing4": {
+      "parent": "LeftRing3",
+      "position": [
+        0.8379060187072195,
+        1.3535595872086843,
+        -0.06475457790389712
+      ]
+    },
+    "LeftLittle1": {
+      "parent": "LeftHand",
+      "position": [
+        0.7461454881673616,
+        1.3493816202648947,
+        -0.08299206546266352
+      ]
+    },
+    "LeftLittle2": {
+      "parent": "LeftLittle1",
+      "position": [
+        0.779971430039915,
+        1.349381598067005,
+        -0.08299232553583441
+      ]
+    },
+    "LeftLittle3": {
+      "parent": "LeftLittle2",
+      "position": [
+        0.7998366367138986,
+        1.3493819939695286,
+        -0.0829923593557742
+      ]
+    },
+    "LeftLittle4": {
+      "parent": "LeftLittle3",
+      "position": [
+        0.8184002445658066,
+        1.349382243875472,
+        -0.08299277626779163
+      ]
+    },
+    "RightShoulder": {
+      "parent": "UpperChest",
+      "position": [
+        -0.04293934415299273,
+        1.3589043800525258,
+        -0.02625822214243361
+      ]
+    },
+    "RightArm": {
+      "parent": "RightShoulder",
+      "position": [
+        -0.14246969993534833,
+        1.3539733995018768,
+        -0.047231029602581166
+      ]
+    },
+    "RightForeArm": {
+      "parent": "RightArm",
+      "position": [
+        -0.40406862552145856,
+        1.3539732497693022,
+        -0.047230923514499035
+      ]
+    },
+    "RightHand": {
+      "parent": "RightForeArm",
+      "position": [
+        -0.6702463731795991,
+        1.3539733870255233,
+        -0.047230398206429526
+      ]
+    },
+    "RightLittle1": {
+      "parent": "RightHand",
+      "position": [
+        -0.7461348820862239,
+        1.3493840575822174,
+        -0.08299168239283772
+      ]
+    },
+    "RightLittle2": {
+      "parent": "RightLittle1",
+      "position": [
+        -0.7799608956445637,
+        1.3493844654971925,
+        -0.08299121667957608
+      ]
+    },
+    "RightLittle3": {
+      "parent": "RightLittle2",
+      "position": [
+        -0.7998261023185473,
+        1.3493847180286767,
+        -0.08299108024605051
+      ]
+    },
+    "RightLittle4": {
+      "parent": "RightLittle3",
+      "position": [
+        -0.8183897101704554,
+        1.3493846811920998,
+        -0.08299109392608699
+      ]
+    },
+    "RightRing1": {
+      "parent": "RightHand",
+      "position": [
+        -0.7557837889238842,
+        1.3535609009917988,
+        -0.06475463510196146
+      ]
+    },
+    "RightRing2": {
+      "parent": "RightRing1",
+      "position": [
+        -0.7854190514143962,
+        1.3535613248094847,
+        -0.06475417820154857
+      ]
+    },
+    "RightRing3": {
+      "parent": "RightRing2",
+      "position": [
+        -0.8130214483766587,
+        1.353560886699402,
+        -0.06475455870868886
+      ]
+    },
+    "RightRing4": {
+      "parent": "RightRing3",
+      "position": [
+        -0.8378969180275945,
+        1.3535611642947656,
+        -0.06475458689827393
+      ]
+    },
+    "RightMiddle1": {
+      "parent": "RightHand",
+      "position": [
+        -0.7598138921445856,
+        1.3539733806475298,
+        -0.047230256763405774
+      ]
+    },
+    "RightMiddle2": {
+      "parent": "RightMiddle1",
+      "position": [
+        -0.794562501772767,
+        1.3539735197640346,
+        -0.04723046231123185
+      ]
+    },
+    "RightMiddle3": {
+      "parent": "RightMiddle2",
+      "position": [
+        -0.822289345260068,
+        1.3539735139667857,
+        -0.04723046106962374
+      ]
+    },
+    "RightMiddle4": {
+      "parent": "RightMiddle3",
+      "position": [
+        -0.8489166721569082,
+        1.3539736512259404,
+        -0.04722995360075679
+      ]
+    },
+    "RightIndex1": {
+      "parent": "RightHand",
+      "position": [
+        -0.7558278756824663,
+        1.3491178156244044,
+        -0.02599435745746663
+      ]
+    },
+    "RightIndex2": {
+      "parent": "RightIndex1",
+      "position": [
+        -0.790371463961794,
+        1.349118098857257,
+        -0.025994058357477732
+      ]
+    },
+    "RightIndex3": {
+      "parent": "RightIndex2",
+      "position": [
+        -0.8174608057514181,
+        1.3491178088246623,
+        -0.025993676138859
+      ]
+    },
+    "RightIndex4": {
+      "parent": "RightIndex3",
+      "position": [
+        -0.839942902054739,
+        1.3491182347688782,
+        -0.025993413471734342
+      ]
+    },
+    "RightThumb1": {
+      "parent": "RightHand",
+      "position": [
+        -0.6934057567920003,
+        1.3391963594053484,
+        -0.022024458625300225
+      ]
+    },
+    "RightThumb2": {
+      "parent": "RightThumb1",
+      "position": [
+        -0.723752787454809,
+        1.3216756335906201,
+        -0.004503572449816814
+      ]
+    },
+    "RightThumb3": {
+      "parent": "RightThumb2",
+      "position": [
+        -0.748676716697292,
+        1.3072862888308168,
+        0.009885891074676436
+      ]
+    },
+    "RightThumb4": {
+      "parent": "RightThumb3",
+      "position": [
+        -0.7670420416642596,
+        1.296683389284168,
+        0.02048933831193339
+      ]
+    },
+    "LeftUpLeg": {
+      "parent": "Hips",
+      "position": [
+        0.07712031265500206,
+        0.9167006646684326,
+        0.00447754455893999
+      ]
+    },
+    "LeftLeg": {
+      "parent": "LeftUpLeg",
+      "position": [
+        0.07712030369427876,
+        0.49979569031613885,
+        0.007151990883187582
+      ]
+    },
+    "LeftFoot": {
+      "parent": "LeftLeg",
+      "position": [
+        0.07712031265500206,
+        0.08235142818955489,
+        -0.02086873456663714
+      ]
+    },
+    "LeftToeBase": {
+      "parent": "LeftFoot",
+      "position": [
+        0.07712028577283218,
+        0.0003368755618432114,
+        0.07976767941140415
+      ]
+    },
+    "LeftToe_End": {
+      "parent": "LeftToeBase",
+      "position": [
+        0.07712025889066232,
+        0.00033048316964217326,
+        0.16694504569207677
+      ]
+    },
+    "RightUpLeg": {
+      "parent": "Hips",
+      "position": [
+        -0.07712044706585139,
+        0.9167011664689121,
+        0.0044775064759378464
+      ]
+    },
+    "RightLeg": {
+      "parent": "RightUpLeg",
+      "position": [
+        -0.07712045602657468,
+        0.4997956903140957,
+        0.00716617850753481
+      ]
+    },
+    "RightFoot": {
+      "parent": "RightLeg",
+      "position": [
+        -0.07712045602657468,
+        0.08235282606239486,
+        -0.020869569593793075
+      ]
+    },
+    "RightToeBase": {
+      "parent": "RightFoot",
+      "position": [
+        -0.07712047394802125,
+        0.0003382375917894597,
+        0.07976685334496472
+      ]
+    },
+    "RightToe_End": {
+      "parent": "RightToeBase",
+      "position": [
+        -0.07712049186946784,
+        0.0003318541603302961,
+        0.1669440762540745
+      ]
+    },
+    "UpperChest": {
+      "parent": "Chest",
+      "position": [
+        9.547501697391404e-8,
+        1.3375103873727379,
+        -0.013859175791581099
+      ]
+    }
+  },
+  "chains": {
+    "leftArm": [
+      "LeftArm",
+      "LeftForeArm",
+      "LeftHand"
+    ],
+    "rightArm": [
+      "RightArm",
+      "RightForeArm",
+      "RightHand"
+    ],
+    "leftLeg": [
+      "LeftUpLeg",
+      "LeftLeg",
+      "LeftFoot"
+    ],
+    "rightLeg": [
+      "RightUpLeg",
+      "RightLeg",
+      "RightFoot"
+    ]
+  },
+  "headAnchors": {
+    "nose": [
+      0,
+      0.035,
+      0.105
+    ],
+    "leftEye": [
+      0.02882279819025452,
+      0.06022379544084244,
+      0.08722827181541984
+    ],
+    "rightEye": [
+      -0.028822701862479164,
+      0.060223795440851546,
+      0.08722820909036054
+    ],
+    "leftEar": [
+      0.065,
+      0.055,
+      0
+    ],
+    "rightEar": [
+      -0.065,
+      0.055,
+      0
+    ]
+  },
+  "source": {
+    "creator": "Adobe Mixamo",
+    "character": "X Bot",
+    "characterSite": "https://www.mixamo.com/",
+    "distribution": "Three.js r180 official example",
+    "url": "https://raw.githubusercontent.com/mrdoob/three.js/r180/examples/models/gltf/Xbot.glb",
+    "sha256": "002f8d269de68e5dce3d25195caf390d1aa359bbfaae3fcf4c8dc78ec36c3ba5",
+    "usageReference": "https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html"
+  },
+  "mesh": {
+    "vertices": 28374,
+    "triangles": 49112,
+    "bones": 68,
+    "meshes": 2
+  }
+}

@@ -12,7 +12,7 @@ export const DEFAULT_VIEWS: ViewSlot[] = [
 ];
 export type Pin = { position: Vec3; quaternion: Quat; orientation: boolean };
 export type PoseDocument = {
-  format: 'momo-pose-forge'; version: 1; rig: 'makehuman-core-v1'; name: string;
+  format: 'momo-pose-forge'; version: 1; rig: string; name: string;
   root: { position: Vec3; quaternion: Quat };
   joints: Record<string, { position: Vec3; quaternion: Quat }>;
   targets: Record<string, Vec3>; poles: Record<string, Vec3>;

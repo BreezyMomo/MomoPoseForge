@@ -1,6 +1,7 @@
 import type { PoseDocument, ViewSlot } from './types';
 import { END_EFFECTORS, DEFAULT_VIEWS } from './types';
 import type { PoseEngine } from './PoseEngine';
+import { CURRENT_MODEL } from './rig';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -10,7 +11,8 @@ export function parseDocument(text:string,rest:PoseDocument):PoseDocument{
   if(text.length>2_000_000)throw new Error('工程文件过大，请使用本站导出的姿态 JSON');
   let raw:unknown;try{raw=JSON.parse(text);}catch{throw new Error('JSON 格式无效，当前姿势未改变');}
   if(!record(raw)||raw.format!=='momo-pose-forge')throw new Error('这不是 MomoPoseForge 工程文件');
-  if(raw.version!==1||raw.rig!=='makehuman-core-v1')throw new Error('工程或人体版本不兼容，请使用 v1 工程');
+  if(raw.version!==1)throw new Error('工程版本不兼容，请使用 v1 工程');
+  if(raw.rig!==rest.rig)throw new Error('工程使用的人体版本与当前模型不同；原工程文件未修改');
   const d=raw as unknown as PoseDocument;
   if(typeof d.name!=='string'||d.name.length>80||!record(d.root)||!vector(d.root.position,3)||!quaternion(d.root.quaternion)||!record(d.joints)||!record(d.targets)||!record(d.poles)||!record(d.pins))throw new Error('工程结构或坐标无效');
   if(Object.keys(d.joints).length!==Object.keys(rest.joints).length)throw new Error('工程骨骼数量不匹配');
@@ -60,8 +62,8 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       zip.file('contact-sheet.png',await toBlob(sheet));
     }
     if(options.project)zip.file('project.pose.json',JSON.stringify(doc,null,2));
-    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.1.0',projectVersion:1,rig:'makehuman-core-v1',width:w,height:h,coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18',keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:'retain valid occluded joints; zero missing/out-of-frame points',viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:true},views:manifestViews,modelLicense:'CC0-1.0'},null,2));
-    zip.file('README.txt','MomoPoseForge 姿态导出\n\n每个视角的 mannequin.png 是人体参考图，openpose-coco18.png 是黑底身体骨架控制图。\nkeypoints-coco18.json 使用 OpenPose COCO18 点序，坐标为该 PNG 的像素，c=1 代表程序生成的有效点；不代表 AI 检测置信度。手指和面部点集未输出。\nproject.pose.json 可在 MomoPoseForge 中重新打开继续编辑。manifest.json 记录相机、图像尺寸与坐标约定。\ncontact-sheet.png 用于查看整组视角；单视角 AI 工作流请使用对应目录内的独立图。\n下游工具须支持相应的骨架图或 JSON 格式，并按其要求载入。本版本未对所有第三方工作流作兼容认证。\n人体源资产：MakeHuman core，CC0-1.0。\n');
+    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.1.0',projectVersion:1,rig:doc.rig,width:w,height:h,coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18',keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:'retain valid occluded joints; zero missing/out-of-frame points',viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:true},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
+    zip.file('README.txt','MomoPoseForge 姿态导出\n\n每个视角的 mannequin.png 是人体参考图，openpose-coco18.png 是黑底身体骨架控制图。\nkeypoints-coco18.json 使用 OpenPose COCO18 点序，坐标为该 PNG 的像素，c=1 代表程序生成的有效点；不代表 AI 检测置信度。手指和面部点集未输出。\nproject.pose.json 可在 MomoPoseForge 中重新打开继续编辑。manifest.json 记录相机、图像尺寸与坐标约定。\ncontact-sheet.png 用于查看整组视角；单视角 AI 工作流请使用对应目录内的独立图。\n下游工具须支持相应的骨架图或 JSON 格式，并按其要求载入。本版本未对所有第三方工作流作兼容认证。\n角色资产：Adobe Mixamo X Bot，使用说明见 https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html 。\n');
     onProgress('正在打包文件');check();const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},()=>check());check();download(blob,`${safeName(doc.name)}.zip`);
   }finally{engine.apply(doc);}
 }

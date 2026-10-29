@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { solveTwoBone, projectPoint } from './math';
+import { solveTwoBone, solveLimbRotations, projectPoint } from './math';
 import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
+import { CURRENT_MODEL } from './rig';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
@@ -54,7 +55,7 @@ export class PoseEngine {
   private dragBefore: PoseDocument | null = null;
   private suppress = false;
   private cancelPending = false;
-  private profile: { headAnchors?: Record<string, number[]> } = {};
+  private profile: { id?:string; headAnchors?: Record<string, number[]>; hingeAxes?:Record<string,number[]>; handCurlNormalSign?:number } = {};
   onInfo: (info: EngineInfo) => void;
   onCommit: (document: PoseDocument) => void;
 
@@ -111,17 +112,18 @@ export class PoseEngine {
 
   async load() {
     const [gltf, profile] = await Promise.all([
-      new GLTFLoader().loadAsync('/models/human.glb'),
-      fetch('/models/human-profile.json').then(r => { if (!r.ok) throw new Error('人体定义载入失败'); return r.json(); }),
+      new GLTFLoader().loadAsync(CURRENT_MODEL.modelUrl),
+      fetch(CURRENT_MODEL.profileUrl).then(r => { if (!r.ok) throw new Error('人体定义载入失败'); return r.json(); }),
     ]);
     if (this.disposed) return;
     this.profile = profile;
+    if(profile.id!==CURRENT_MODEL.rig)throw new Error('模型与骨骼定义版本不匹配');
     this.model.add(gltf.scene);
     this.model.traverse(obj => {
       if (obj instanceof THREE.Bone) this.bones[obj.name] = obj;
       if (obj instanceof THREE.SkinnedMesh) {
         obj.castShadow = true; obj.frustumCulled = false;
-        obj.material = new THREE.MeshStandardMaterial({ color:'#bfc0b9', roughness:.72, metalness:0, side:THREE.DoubleSide });
+        // Preserve X Bot's original red shell and dark joint materials.
         this.vertexCount += obj.geometry.attributes.position.count;
       }
     });
@@ -130,7 +132,7 @@ export class PoseEngine {
     for (const end of END_EFFECTORS) {
       this.targets[end] = asVec(this.world(end));
       const b = this.world(CHAINS[end][1]);
-      this.poles[end] = asVec(b.add(new V(0,0,.5)));
+      this.poles[end] = asVec(b.add(new V(0,0,end.endsWith('Hand')?-.5:.5)));
     }
     this.rest = this.snapshot();
     for (const name of ['LeftHand','RightHand','LeftFoot','RightFoot','Hips','Chest','Head','LeftForeArm','RightForeArm','LeftLeg','RightLeg']) {
@@ -146,32 +148,28 @@ export class PoseEngine {
     const parent = bone.parent?.getWorldQuaternion(new Q()) ?? new Q();
     bone.quaternion.copy(parent.invert().multiply(quaternion)); bone.updateWorldMatrix(false,true);
   }
-  private turnBoneToward(name: string, childName: string, point: THREE.Vector3) {
-    const bone = this.bones[name], origin = this.world(name);
-    const current = this.world(childName).sub(origin).normalize();
-    const desired = point.clone().sub(origin).normalize();
-    if (current.lengthSq() < .5 || desired.lengthSq() < .5) return;
-    const change = new Q().setFromUnitVectors(current,desired);
-    this.setWorldQuaternion(bone, change.multiply(bone.getWorldQuaternion(new Q())));
-  }
+  private hingeAxis(mid:string){return new V().fromArray(this.profile.hingeAxes?.[mid]??(mid.endsWith('Leg')?[1,0,0]:[0,mid.startsWith('Left')?-1:1,0])).normalize();}
 
   private limitHinge(name:string){
     const entry=Object.values(CHAINS).find(c=>c[1]===name);if(!entry)return;
     const bone=this.bones[name],upper=new V().fromArray(this.rest.joints[name].position).normalize(),lower=new V().fromArray(this.rest.joints[entry[2]].position).normalize();
-    const axis=new V().crossVectors(upper,lower).normalize();if(axis.lengthSq()<.5)axis.set(1,0,0);
-    const restBend=Math.acos(THREE.MathUtils.clamp(upper.dot(lower),-1,1)),q=bone.quaternion;
+    const axis=this.hingeAxis(name);
+    const restBend=Math.atan2(axis.dot(new V().crossVectors(upper,lower)),THREE.MathUtils.clamp(upper.dot(lower),-1,1)),q=bone.quaternion;
     let angle=2*Math.atan2(new V(q.x,q.y,q.z).dot(axis),q.w);
     if(angle>Math.PI)angle-=2*Math.PI;if(angle< -Math.PI)angle+=2*Math.PI;
     angle=THREE.MathUtils.clamp(angle,-restBend,THREE.MathUtils.degToRad(name.endsWith('Leg')?150:155)-restBend);
     bone.quaternion.setFromAxisAngle(axis,angle);bone.updateWorldMatrix(false,true);
   }
 
-  solve(end: string, target: THREE.Vector3, pole?: THREE.Vector3) {
+  solve(end: string, target: THREE.Vector3, pole?: THREE.Vector3, preserveEndOrientation=true) {
     const chain = CHAINS[end]; if (!chain) return;
     const [a,b,c] = chain;
-    const start = this.world(a), mid = this.world(b), last = this.world(c);
+    const start = this.world(a), mid = this.world(b), last = this.world(c),endOrientation=this.bones[c].getWorldQuaternion(new Q());
     const result = solveTwoBone(start,target,pole ?? new V().fromArray(this.poles[end]),start.distanceTo(mid),mid.distanceTo(last),end.endsWith('Foot') ? 150:155);
-    this.turnBoneToward(a,b,result.elbow); this.turnBoneToward(b,c,result.end);
+    const rotations=solveLimbRotations(new V().fromArray(this.rest.joints[b].position),new V().fromArray(this.rest.joints[c].position),this.hingeAxis(b),result.elbow.clone().sub(start),result.end.clone().sub(result.elbow),end.endsWith('Foot')?150:155);
+    this.setWorldQuaternion(this.bones[a],rotations.upperWorld);
+    this.bones[b].quaternion.copy(rotations.lowerLocal);this.bones[b].updateWorldMatrix(false,true);
+    if(preserveEndOrientation)this.setWorldQuaternion(this.bones[c],endOrientation);
     if (result.error > .009) this.warning = `${PART_NAMES[end]}目标超出当前可达范围`;
     return result;
   }
@@ -195,7 +193,7 @@ export class PoseEngine {
       }
     } else if (CHAINS[this.selected]) {
       const target = this.gizmo.position.clone();
-      if (this.ground && this.selected.endsWith('Foot')) target.y = Math.max(.074, target.y);
+      if (this.ground && this.selected.endsWith('Foot')) target.y = Math.max(this.rest.targets[this.selected][1], target.y);
       this.targets[this.selected] = asVec(target);
       if (this.pins[this.selected as Effector]) this.pins[this.selected as Effector]!.position = asVec(target);
       this.solve(this.selected,target);
@@ -273,6 +271,7 @@ export class PoseEngine {
     this.hands[side]=shape;
     const index=new V().fromArray(this.rest.joints[`${side}Index1`].position),little=new V().fromArray(this.rest.joints[`${side}Little1`].position);
     const palmNormal=new V().crossVectors(index,little).normalize();if(side==='Right')palmNormal.negate();
+    palmNormal.multiplyScalar(this.profile.handCurlNormalSign??1);
     for(const digit of ['Thumb','Index','Middle','Ring','Little'])for(let i=1;i<=3;i++){
       const bone=this.bones[`${side}${digit}${i}`];if(!bone)continue;
       bone.quaternion.fromArray(this.rest.joints[bone.name].quaternion);
@@ -296,13 +295,15 @@ export class PoseEngine {
     this.bones.Spine.quaternion.setFromEuler(new THREE.Euler(preset.lean??0,preset.twist??0,0));
     this.bones.Head.quaternion.setFromEuler(new THREE.Euler(0,preset.head??0,0));
     this.model.updateMatrixWorld(true);
-    const defaults:Record<Effector,Vec3>={LeftHand:[.235,.93,.02],RightHand:[-.235,.93,.02],LeftFoot:[.14,.074,0],RightFoot:[-.14,.074,0]};
+    const defaults:Record<Effector,Vec3>={LeftHand:[.235,.93,.02],RightHand:[-.235,.93,.02],LeftFoot:[.14,this.rest.targets.LeftFoot[1],0],RightFoot:[-.14,this.rest.targets.RightFoot[1],0]};
     for(const end of END_EFFECTORS){
-      const target=preset.hands?.[end]??preset.feet?.[end]??defaults[end];
+      const target:Vec3=[...(preset.hands?.[end]??preset.feet?.[end]??defaults[end])];
+      if(end.endsWith('Foot')&&preset.feet?.[end])target[1]=this.rest.targets[end][1]+target[1]-.10;
+      if(end.endsWith('Foot')&&this.ground)target[1]=Math.max(this.rest.targets[end][1],target[1]);
       this.targets[end]=[...target];
       const elbow=this.world(CHAINS[end][1]);
-      this.poles[end]=preset.poles?.[end]??(end.endsWith('Foot')?[end.startsWith('Left')?.35:-.35,.4,.8]:asVec(elbow.add(new V(0,0,.65))));
-      this.solve(end,new V().fromArray(target));
+      this.poles[end]=preset.poles?.[end]??(end.endsWith('Foot')?[end.startsWith('Left')?.35:-.35,.4,.8]:asVec(elbow.add(new V(0,0,-.65))));
+      this.solve(end,new V().fromArray(target),undefined,false);
       if(end.endsWith('Foot'))this.setWorldQuaternion(this.bones[end],new Q());
     }
     this.applyHandShape('Left',preset.handShape??'张手');this.applyHandShape('Right',preset.handShape??'张手');
@@ -341,7 +342,7 @@ export class PoseEngine {
   private syncTargets(){this.model.updateMatrixWorld(true);for(const end of END_EFFECTORS)this.targets[end]=asVec(this.world(end));}
   snapshot():PoseDocument{
     const joints:PoseDocument['joints']={};for(const[name,b]of Object.entries(this.bones))joints[name]={position:b.position.toArray(),quaternion:b.quaternion.toArray()};
-    return structuredClone({format:'momo-pose-forge',version:1,rig:'makehuman-core-v1',name:this.name,root:{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,views:this.views,ground:this.ground}) as PoseDocument;
+    return structuredClone({format:'momo-pose-forge',version:1,rig:CURRENT_MODEL.rig,name:this.name,root:{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,views:this.views,ground:this.ground}) as PoseDocument;
   }
   apply(doc:PoseDocument,update=true){
     this.suppress=true;this.name=doc.name;this.views=structuredClone(doc.views);this.ground=doc.ground;
