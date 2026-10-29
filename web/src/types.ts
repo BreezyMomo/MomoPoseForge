@@ -17,7 +17,7 @@ export type PoseDocument = {
   joints: Record<string, { position: Vec3; quaternion: Quat }>;
   targets: Record<string, Vec3>; poles: Record<string, Vec3>;
   pins: Partial<Record<Effector, Pin>>;
-  hands: { Left: string; Right: string }; views: ViewSlot[]; ground: boolean;
+  hands: { Left: string; Right: string }; views: ViewSlot[]; ground: boolean; fullBody?:boolean;
 };
 export type Preset = {
   id: string; name: string; category: string; description: string;
@@ -44,7 +44,7 @@ export type FingerValues={curl:[number,number,number];spread:number};
 export type HandValues=Record<Digit,FingerValues>;
 export type EngineInfo = {
   ready: boolean; view: string; navigating:boolean; selected: string; position: Vec3; rotation: Vec3;
-  pinned: boolean; orientationPinned: boolean; ground: boolean; warning: string;
+  pinned: boolean; orientationPinned: boolean; ground: boolean; fullBody:boolean;fixedFeet:number;warning: string;
   hands: { Left: string; Right: string }; boneCount: number; vertexCount: number;
   handDetail:Side|null; fingers:Record<Side,HandValues>; forearmTwist:Record<Side,number>; toes:Record<Side,number>;
 };

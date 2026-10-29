@@ -67,12 +67,12 @@ export function solveSpineTarget(bones:Record<string,Bone>,target:Vector3,rest:R
 export function controlDescription(name:string){
   if(/^(Left|Right)(Thumb|Index|Middle|Ring|Little)[123]$/.test(name))return {label:'手指关节',help:'使用下方手指精调逐节弯曲和张开，也可用旋转控制器调整。'};
   if(name.endsWith('ToeBase'))return {label:'脚趾弯曲',help:'控制前脚掌抬起或下弯，脚踝位置保持不变。'};
-  if(name.endsWith('Shoulder'))return {label:'肩部旋转',help:'旋转锁骨带动上臂；需要固定手位时先固定对应的手。'};
-  if(name.endsWith('Arm')&&!name.endsWith('ForeArm'))return {label:'上臂旋转',help:'旋转上臂调整手臂方向；手脚固定的 IK 目标优先。'};
-  if(name.endsWith('UpLeg'))return {label:'髋部旋转',help:'旋转髋部带动整条腿；固定脚后优先保持脚的目标位置。'};
-  if(name.endsWith('Hand')||name.endsWith('Foot'))return {label:'手脚 IK',help:'移动控制整条手臂或腿；切换旋转可调整手掌、脚掌朝向。'};
-  if(name==='Hips')return {label:'骨盆移动',help:'移动身体根部；开启固定的手脚保持原位置。'};
-  if(name==='Chest')return {label:'胸腔弯曲',help:'移动调整前后弯与侧弯，保留当前扭转；转身请切换旋转。'};
+  if(name.endsWith('Shoulder'))return {label:'肩部旋转',help:'锁骨抬落和前后摆动受限位；固定手位时，手臂配合调整。'};
+  if(name.endsWith('Arm')&&!name.endsWith('ForeArm'))return {label:'上臂旋转',help:'摆动和轴向扭转受限位；手脚固定的 IK 目标优先。'};
+  if(name.endsWith('UpLeg'))return {label:'髋部旋转',help:'屈伸、内收外展和轴向转动受限位；固定脚后优先保持脚位。'};
+  if(name.endsWith('Hand')||name.endsWith('Foot'))return {label:'手脚 IK',help:'移动调整目标；开启全身联动可让肩、躯干和骨盆参与。旋转调整手脚朝向。'};
+  if(name==='Hips')return {label:'骨盆移动',help:'固定双脚后拖动骨盆，双腿配合屈伸；超出可达范围时限制移动。'};
+  if(name==='Chest')return {label:'胸腔弯曲',help:'保留当前转身角调整弯曲；开启全身联动时骨盆和双腿可以配合。'};
   if(name.endsWith('ForeArm')||name==='LeftLeg'||name==='RightLeg')return {label:'肘膝朝向',help:'移动改变弯曲方向，手脚保持当前目标位置。'};
   return {label:'关节旋转',help:'旋转调整关节方向；脊柱、颈部和头部受角度范围约束。'};
 }

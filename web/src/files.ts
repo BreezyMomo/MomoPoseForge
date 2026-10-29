@@ -28,6 +28,7 @@ export function parseDocument(text:string,rest:PoseDocument):PoseDocument{
   if(Object.keys(d.pins).some(k=>!END_EFFECTORS.includes(k as typeof END_EFFECTORS[number])))throw new Error('包含未知的固定部位');
   if(!Array.isArray(d.views)||d.views.length!==5||d.views.some((v,i)=>!record(v)||v.id!==DEFAULT_VIEWS[i].id||typeof v.name!=='string'||v.name.length>30||!Number.isFinite(v.azimuth)||Math.abs(v.azimuth)>360||!Number.isFinite(v.elevation)||Math.abs(v.elevation)>89))throw new Error('五视图相机设置无效');
   if(!record(d.hands)||!['张手','握拳','指向','自定义'].includes(d.hands.Left)||!['张手','握拳','指向','自定义'].includes(d.hands.Right)||typeof d.ground!=='boolean')throw new Error('手型或地面设置无效');
+  if(d.fullBody!==undefined&&typeof d.fullBody!=='boolean')throw new Error('全身联动设置无效');
   return structuredClone(d);
 }
 

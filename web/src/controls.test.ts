@@ -14,7 +14,7 @@ function makeEngine(){
   }
   root.updateMatrixWorld(true);
   const engine=Object.create(PoseEngine.prototype) as PoseEngine;
-  Object.assign(engine,{model:root,bones,gizmo:new Object3D(),selected:'Chest',mode:'translate',ready:false,targets:{},poles:{},pins:{},hands:{Left:'张手',Right:'张手'},views:[],ground:false,profile:rig,dragBefore:null,transform:{setMode(){},attach(){}}});
+  Object.assign(engine,{model:root,bones,gizmo:new Object3D(),selected:'Chest',mode:'translate',ready:false,targets:{},poles:{},pins:{},hands:{Left:'张手',Right:'张手'},views:[],ground:false,fullBody:false,profile:rig,dragBefore:null,transform:{setMode(){},attach(){}}});
   for(const end of ['LeftHand','RightHand','LeftFoot','RightFoot']){engine.targets[end]=engine.world(end).toArray();engine.poles[end]=engine.world(end).add(new Vector3(0,0,.8)).toArray();}
   engine.rest=engine.snapshot();
   return engine;

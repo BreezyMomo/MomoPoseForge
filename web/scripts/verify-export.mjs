@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Bone, Group, Matrix4, Vector3 } from 'three';
+import { Bone, Group, Matrix4, Vector3, Quaternion, MathUtils } from 'three';
 
 const zip=await JSZip.loadAsync(fs.readFileSync(process.argv[2]));
 const json=async p=>JSON.parse(await zip.file(p).async('string'));
@@ -26,4 +26,6 @@ for(const view of manifest.views){
 }
 assert.ok(maxError<.001,'PNG camera projection and exported keypoints must agree');
 assert.equal(manifest.views.length,manifest.views[0].id==='current'?1:5);
-console.log(JSON.stringify({views:manifest.views.length,files:Object.values(zip.files).filter(f=>!f.dir).length,width:manifest.width,height:manifest.height,keypointMaximumErrorPixels:maxError},null,2));
+const pins=Object.entries(doc.pins??{}),pinError=pins.reduce((max,[name,pin])=>Math.max(max,pos(name).distanceTo(new Vector3().fromArray(pin.position))),0);
+const directionError=pins.reduce((max,[name,pin])=>Math.max(max,pin.orientation?bones[name].getWorldQuaternion(new Quaternion()).angleTo(new Quaternion().fromArray(pin.quaternion)):0),0);
+console.log(JSON.stringify({views:manifest.views.length,files:Object.values(zip.files).filter(f=>!f.dir).length,width:manifest.width,height:manifest.height,keypointMaximumErrorPixels:maxError,fixedPoints:pins.length,fixedPointMaximumErrorMillimetres:pinError*1000,fixedDirectionMaximumErrorDegrees:MathUtils.radToDeg(directionError)},null,2));
