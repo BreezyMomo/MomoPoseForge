@@ -8,6 +8,7 @@ import { CURRENT_MODEL } from './rig';
 import {controlDescription} from './poseControls';
 import {emptyHandValues} from './articulation';
 import {FineControls} from './FineControls';
+import type {RenderKind} from './renderPasses';
 import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
@@ -37,7 +38,9 @@ export default function App(){
   const [mode,setMode]=useState<'translate'|'rotate'>('translate'),[space,setSpace]=useState<'world'|'local'>('world'),[display,setDisplay]=useState<'surface'|'skeleton'>('surface');
   const [more,setMore]=useState(true),[grid,setGrid]=useState(true),[view,setView]=useState('free'),[leftOpen,setLeftOpen]=useState(false),[rightOpen,setRightOpen]=useState(false);
   const [exportOpen,setExportOpen]=useState(false),[helpOpen,setHelpOpen]=useState(false),[exporting,setExporting]=useState(false),[progress,setProgress]=useState('');
-  const [options,setOptions]=useState<ExportOptions>({scope:'five',surface:true,skeleton:false,keypoints:false,sheet:true,project:true,resolution:768,transparent:false});
+  const [options,setOptions]=useState<ExportOptions>({scope:'five',surface:true,skeleton:false,keypoints:false,depth:false,normal:false,sheet:true,project:true,resolution:768,transparent:false,hideOccludedHands:true});
+  const [exportPreviewKind,setExportPreviewKind]=useState<RenderKind>('surface'),[exportPreviews,setExportPreviews]=useState<Thumbnail[]>([]),[previewBusy,setPreviewBusy]=useState(false),[previewError,setPreviewError]=useState('');
+  const [exportPreviewEpoch,setExportPreviewEpoch]=useState(0);
   const [projectName,setProjectName]=useState('未命名姿势');
 
   const notify=useCallback((text:string)=>{setToast(text);},[]);
@@ -76,7 +79,23 @@ export default function App(){
     const save=setTimeout(()=>{try{localStorage.setItem(DRAFT_KEY,JSON.stringify(current));setSaveStatus('已保存在本机');}catch{setSaveStatus('本地保存失败');notify('浏览器无法保存草稿，请下载工程文件保留姿势');}},900);
     return()=>{clearTimeout(timer);clearTimeout(save);};
   },[current,notify]);
-  useEffect(()=>{if(exportOpen)exportDialog.current?.showModal();else exportDialog.current?.close();},[exportOpen]);
+  useEffect(()=>{if(exportOpen){exportDialog.current?.showModal();if(exportDialog.current)exportDialog.current.scrollTop=0;}else exportDialog.current?.close();},[exportOpen]);
+  useEffect(()=>{
+    const engine=engineRef.current;if(!exportOpen||!engine?.ready)return;let alive=true;
+    setPreviewBusy(true);setPreviewError('');setExportPreviews([]);
+    void(async()=>{try{
+      const slots=options.scope==='five'?structuredClone(engine.views):[{id:'current',name:'当前视角',azimuth:0,elevation:0}];
+      const cameras=slots.map(slot=>options.scope==='current'?engine.exportCamera(.75):engine.viewCamera(slot,.75)),range=engine.depthRange(cameras),previews:Thumbnail[]=[];
+      for(let i=0;i<slots.length;i++){await new Promise(r=>setTimeout(r,0));if(!alive)return;previews.push({id:slots[i].id,name:slots[i].name,url:engine.renderImage(slots[i],180,240,exportPreviewKind,false,cameras[i],{depthRange:range,hideOccludedHands:options.hideOccludedHands}).toDataURL('image/png')});}
+      if(alive)setExportPreviews(previews);
+    }catch(e){if(alive)setPreviewError(`预览生成失败：${(e as Error).message}`);}finally{if(alive)setPreviewBusy(false);}})();
+    return()=>{alive=false;};
+  },[exportOpen,exportPreviewKind,options.scope,options.hideOccludedHands,current,exportPreviewEpoch]);
+  useEffect(()=>{
+    if(!exportOpen)return;let frame=0;
+    const resize=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>setExportPreviewEpoch(n=>n+1));};
+    window.addEventListener('resize',resize);return()=>{window.removeEventListener('resize',resize);cancelAnimationFrame(frame);};
+  },[exportOpen]);
   useEffect(()=>{if(helpOpen)helpDialog.current?.showModal();else helpDialog.current?.close();},[helpOpen]);
   useEffect(()=>{
     const key=(e:KeyboardEvent)=>{
@@ -161,19 +180,23 @@ export default function App(){
         <div className="inspector-bottom"><span><span className="status-dot"/>Mixamo X Bot</span><span>{info.ready?`${info.boneCount} 根骨骼 · 完整蒙皮`:'正在载入'}</span><a href={CURRENT_MODEL.sourceUrl} target="_blank" rel="noreferrer">模型来源与说明<ArrowUpRight size={12}/></a></div>
       </aside>
     </div>
-    <footer className="statusbar"><span>MomoPoseForge<span className="version">v0.1</span></span><span><kbd>W</kbd>移动<kbd>E</kbd>旋转<kbd>F</kbd>聚焦</span><span>人体姿态编辑 · 数据留在你的设备上</span></footer>
+    <footer className="statusbar"><span>MomoPoseForge<span className="version">v0.2</span></span><span><kbd>W</kbd>移动<kbd>E</kbd>旋转<kbd>F</kbd>聚焦</span><span>人体姿态编辑 · 数据留在你的设备上</span></footer>
     {toast&&<div className="toast" role="status"><Check size={15}/>{toast}<button aria-label="关闭提示" onClick={()=>setToast('')}><X size={14}/></button></div>}
 
     <dialog ref={exportDialog} className="export-dialog" onCancel={e=>{if(exporting){e.preventDefault();exportAbort.current?.abort();}else setExportOpen(false);}} onClose={()=>{if(!exporting)setExportOpen(false);}}>
       <div className="dialog-header"><div><span className="dialog-eyebrow">准备交付</span><h2>导出姿势参考</h2></div><IconButton icon={X} label="关闭导出" disabled={exporting} onClick={()=>setExportOpen(false)}/></div>
       <p className="dialog-description">所有视图来自同一份姿态，图片与关节点保持对应。</p>
-      <div className="export-preview">{thumbnails.map(t=><div key={t.id}><img src={t.url} alt={t.name}/><span>{t.name}</span></div>)}</div>
-      <fieldset disabled={exporting}><div className="export-layout"><div><h3>导出范围</h3><div className="choice-row"><button className={options.scope==='five'?'selected':''} onClick={()=>setOptions({...options,scope:'five'})}>完整五视图</button><button className={options.scope==='current'?'selected':''} onClick={()=>setOptions({...options,scope:'current'})}>当前视角</button></div></div><div><h3>单张分辨率</h3><select aria-label="导出分辨率" value={options.resolution} onChange={e=>setOptions({...options,resolution:Number(e.target.value) as 768|1536})}><option value={768}>768 × 1024</option><option value={1536}>1536 × 2048</option></select></div></div>
-        <div className="export-section-label"><h3>文件内容</h3><button onClick={()=>setOptions({...options,surface:false,skeleton:true,keypoints:true,sheet:false,project:true})}>使用 AI 姿势控制方案<ChevronRight size={12}/></button></div>
-        <div className="export-checks">{([['surface','人体素体图','PNG · X Bot 素体参考'],['skeleton','身体骨架图','PNG · 黑底 COCO18'],['keypoints','二维关节点','JSON · OpenPose COCO18'],['sheet','视图拼图','PNG · 便于整组查看'],['project','可编辑工程','JSON · 保留全部姿态与相机']] as const).map(([key,label,hint])=><label className="export-check" key={key}><input type="checkbox" checked={options[key]} onChange={e=>setOptions({...options,[key]:e.target.checked})}/><span>{label}<small>{hint}</small></span></label>)}</div><label className="setting-row export-transparent"><span>人体图使用透明背景</span><input type="checkbox" role="switch" checked={options.transparent} onChange={e=>setOptions({...options,transparent:e.target.checked})}/></label>
-      </fieldset>
-      <div className="dialog-footer"><span>{exporting?<><LoaderCircle size={14} className="spin"/>{progress}</>:<><LockKeyhole size={13}/>浏览器本地生成 ZIP</>}</span>{exporting?<button onClick={()=>exportAbort.current?.abort()}>取消导出</button>:<button className="primary-button" disabled={!Object.entries(options).some(([k,v])=>['surface','skeleton','keypoints','sheet','project'].includes(k)&&v)} onClick={()=>void runExport()}><Download size={16}/>生成并下载</button>}</div>
+      <div className="export-preview-controls" role="group" aria-label="预览输出通道">{([['surface','素体'],['skeleton','身体与双手'],['depth','深度'],['normal','法线']] as const).map(([kind,label])=><button key={kind} disabled={exporting} aria-pressed={exportPreviewKind===kind} onClick={()=>setExportPreviewKind(kind)}>{label}</button>)}</div>
+      {previewBusy?<p className="export-preview-status" role="status"><LoaderCircle size={14} className="spin"/>正在渲染预览…</p>:previewError?<p className="export-preview-status error" role="alert">{previewError}</p>:<div className={`export-preview${options.scope==='current'?' single':''}`}>{exportPreviews.map(t=><div key={t.id}><img src={t.url} alt={`${t.name}${exportPreviewKind==='depth'?'深度':exportPreviewKind==='normal'?'法线':exportPreviewKind==='skeleton'?'身体与双手骨架':'素体'}预览`}/><span>{t.name}</span></div>)}</div>}
+      <div className="export-scroll"><fieldset disabled={exporting}><div className="export-layout"><div><h3>导出范围</h3><div className="choice-row"><button className={options.scope==='five'?'selected':''} onClick={()=>setOptions({...options,scope:'five'})}>完整五视图</button><button className={options.scope==='current'?'selected':''} onClick={()=>setOptions({...options,scope:'current'})}>当前视角</button></div></div><div><h3>单张分辨率</h3><select aria-label="导出分辨率" value={options.resolution} onChange={e=>setOptions({...options,resolution:Number(e.target.value) as 768|1536})}><option value={768}>768 × 1024</option><option value={1536}>1536 × 2048</option></select></div></div>
+        <div className="export-section-label"><h3>文件内容</h3><button onClick={()=>setOptions({...options,surface:false,skeleton:true,keypoints:true,depth:true,normal:true,sheet:false,project:true})}>使用 AI 控制图全套<ChevronRight size={12}/></button></div>
+        <div className="export-checks">{([['surface','人体素体图','PNG · X Bot 素体参考'],['skeleton','身体与双手骨架','PNG · COCO18 + 双手各 21 点'],['keypoints','二维与三维关节点','JSON · OpenPose + 米制三维骨架'],['depth','深度图','PNG · 近白远黑，五视图共用范围'],['normal','表面法线图','PNG · ControlNet 1.1 方向约定'],['sheet','视图拼图','PNG · 便于整组查看'],['project','可编辑工程','JSON · 保留全部姿态与相机']] as const).map(([key,label,hint])=><label className="export-check" key={key}><input type="checkbox" checked={options[key]} onChange={e=>setOptions({...options,[key]:e.target.checked})}/><span>{label}<small>{hint}</small></span></label>)}</div>
+        <label className="setting-row export-transparent"><span>隐藏被遮挡的手部点</span><input type="checkbox" role="switch" disabled={!options.skeleton&&!options.keypoints&&exportPreviewKind!=='skeleton'} checked={options.hideOccludedHands} onChange={e=>setOptions({...options,hideOccludedHands:e.target.checked})}/></label>
+        <label className="setting-row export-transparent"><span>人体图使用透明背景</span><input type="checkbox" role="switch" disabled={!options.surface&&!options.sheet} checked={options.transparent} onChange={e=>setOptions({...options,transparent:e.target.checked})}/></label>
+        <p className="field-help">预览通道可单独切换，下载内容以勾选项为准。控制图附带本地运行脚本与配置；深度和法线图同时包含角色遮罩。</p>
+      </fieldset></div>
+      <div className="dialog-footer"><span>{exporting?<><LoaderCircle size={14} className="spin"/>{progress}</>:<><LockKeyhole size={13}/>浏览器本地生成 ZIP</>}</span>{exporting?<button onClick={()=>exportAbort.current?.abort()}>取消导出</button>:<button className="primary-button" disabled={!Object.entries(options).some(([k,v])=>['surface','skeleton','keypoints','depth','normal','sheet','project'].includes(k)&&v)} onClick={()=>void runExport()}><Download size={16}/>生成并下载</button>}</div>
     </dialog>
-    <dialog ref={helpDialog} className="help-dialog" onCancel={()=>setHelpOpen(false)} onClose={()=>setHelpOpen(false)}><div className="dialog-header"><h2>把想法摆出来</h2><IconButton icon={X} label="关闭帮助" onClick={()=>setHelpOpen(false)}/></div><p>从左侧选择接近的动作，拖动控制点微调。全身控制点默认显示；在“手指精调”进入手部近景，逐节调整手指。</p><dl><dt>飞行观察</dt><dd>按住右键，鼠标转向，WASD 移动；Shift 加速。松开右键退出。</dd><dt>平移观察</dt><dd>按住中键拖动</dd><dt>缩放</dt><dd>滚动鼠标滚轮</dd><dt>调整位置 / 旋转</dt><dd>W / E</dd><dt>聚焦人物</dt><dd>F</dd><dt>撤销 / 重做</dt><dd>Ctrl Z / Ctrl Shift Z</dd><dt>全身联动</dt><dd>点击“固定双脚”，再拖动骨盆或胸腔；远处的手脚目标可带动身体。到达关节或固定点边界时停止并提示。</dd><dt>肘膝朝向</dt><dd>选中肘或膝，在移动模式调整弯曲方向</dd></dl><p>五视图下的复制按钮将当前观察存入对应相机。导出前检查每个视角，选择素体图或 AI 骨架图。</p><p className="field-help">草稿和收藏仅保存在此浏览器。下载工程文件可以在其他设备继续编辑。COCO18 身体输出不含手指和完整面部点集。</p><button className="primary-button" onClick={()=>setHelpOpen(false)}>开始摆姿势</button></dialog>
+    <dialog ref={helpDialog} className="help-dialog" onCancel={()=>setHelpOpen(false)} onClose={()=>setHelpOpen(false)}><div className="dialog-header"><h2>把想法摆出来</h2><IconButton icon={X} label="关闭帮助" onClick={()=>setHelpOpen(false)}/></div><p>从左侧选择接近的动作，拖动控制点微调。全身控制点默认显示；在“手指精调”进入手部近景，逐节调整手指。</p><dl><dt>飞行观察</dt><dd>按住右键，鼠标转向，WASD 移动；Shift 加速。松开右键退出。</dd><dt>平移观察</dt><dd>按住中键拖动</dd><dt>缩放</dt><dd>滚动鼠标滚轮</dd><dt>调整位置 / 旋转</dt><dd>W / E</dd><dt>聚焦人物</dt><dd>F</dd><dt>撤销 / 重做</dt><dd>Ctrl Z / Ctrl Shift Z</dd><dt>全身联动</dt><dd>点击“固定双脚”，再拖动骨盆或胸腔；远处的手脚目标可带动身体。到达关节或固定点边界时停止并提示。</dd><dt>肘膝朝向</dt><dd>选中肘或膝，在移动模式调整弯曲方向</dd></dl><p>五视图下的复制按钮将当前观察存入对应相机。导出前检查每个视角，选择素体图或 AI 骨架图。</p><p className="field-help">草稿和收藏仅保存在此浏览器。下载工程文件可以在其他设备继续编辑。支持 COCO18 身体与双手各 21 点输出，完整面部点集暂未提供。</p><button className="primary-button" onClick={()=>setHelpOpen(false)}>开始摆姿势</button></dialog>
   </div>;
 }

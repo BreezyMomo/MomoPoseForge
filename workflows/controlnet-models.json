@@ -1,0 +1,6 @@
+{
+  "base": {"repo":"stable-diffusion-v1-5/stable-diffusion-v1-5","revision":"451f4fe16113bff5a5d2269ed5ad43b0592e9a14"},
+  "pose": {"repo":"lllyasviel/control_v11p_sd15_openpose","revision":"9ae9f970358db89e211b87c915f9535c6686d5ba"},
+  "depth": {"repo":"lllyasviel/control_v11f1p_sd15_depth","revision":"539f99181d33db39cf1af2e517cd8056785f0a87"},
+  "normal": {"repo":"lllyasviel/control_v11p_sd15_normalbae","revision":"cb7296e6587a219068e9d65864e38729cd862aa8"}
+}

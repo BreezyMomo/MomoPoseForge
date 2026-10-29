@@ -1,0 +1,98 @@
+{
+  "inputZip": "\u63a7\u5236\u56fe\u4e94\u89c6\u56fe\u9a8c\u6536 (1).zip",
+  "inputSha256": "84436fa609e0979e438c3a64fac5dfbca19a83454d46c729d7bb5e4d544bdd4d",
+  "view": "front",
+  "inputImageSha256": {
+    "pose": "1fedee62fec9bdc75821c114d3c3411c67b8df20c8fcc33a32a1e95be981bf2a",
+    "depth": "fc259608aef699c064fe6a349ec8fbe643fa27fb3d57b2d48e86869a34706fff",
+    "normal": "8fee86fb1f06398a867b4fa6206e1a969e26c8c3348fcc51b87058236d424769"
+  },
+  "sourceResolution": [
+    768,
+    1024
+  ],
+  "generationResolution": [
+    384,
+    512
+  ],
+  "seed": 20261029,
+  "steps": 24,
+  "prompt": "A full body studio photograph of an adult person in a blue athletic outfit and sneakers, matching the reference pose, neutral light gray background, realistic human anatomy, natural fabric.",
+  "negativePrompt": "robot, mannequin, plastic, armor, mechanical joints, extra limbs, extra fingers, missing fingers, text, watermark",
+  "scheduler": "UniPCMultistepScheduler",
+  "models": {
+    "base": {
+      "repo": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "revision": "451f4fe16113bff5a5d2269ed5ad43b0592e9a14"
+    },
+    "pose": {
+      "repo": "lllyasviel/control_v11p_sd15_openpose",
+      "revision": "9ae9f970358db89e211b87c915f9535c6686d5ba"
+    },
+    "depth": {
+      "repo": "lllyasviel/control_v11f1p_sd15_depth",
+      "revision": "539f99181d33db39cf1af2e517cd8056785f0a87"
+    },
+    "normal": {
+      "repo": "lllyasviel/control_v11p_sd15_normalbae",
+      "revision": "cb7296e6587a219068e9d65864e38729cd862aa8"
+    }
+  },
+  "runtime": {
+    "torch": "2.5.1+cu121",
+    "diffusers": "0.35.2",
+    "transformers": "4.44.2",
+    "gpu": "NVIDIA GeForce RTX 4070"
+  },
+  "results": [
+    {
+      "controls": [
+        "pose"
+      ],
+      "scales": [
+        0.9
+      ],
+      "output": "front-pose.png",
+      "seconds": 4.661471300001722,
+      "peakCudaAllocatedMiB": 3161.2353515625,
+      "nsfwContentDetected": [
+        false
+      ]
+    },
+    {
+      "controls": [
+        "pose",
+        "depth"
+      ],
+      "scales": [
+        0.9,
+        0.5
+      ],
+      "output": "front-pose-depth.png",
+      "seconds": 5.050441100000171,
+      "peakCudaAllocatedMiB": 3857.89892578125,
+      "nsfwContentDetected": [
+        false
+      ]
+    },
+    {
+      "controls": [
+        "pose",
+        "depth",
+        "normal"
+      ],
+      "scales": [
+        0.9,
+        0.5,
+        0.3
+      ],
+      "output": "front-pose-depth-normal.png",
+      "seconds": 5.765008600006695,
+      "peakCudaAllocatedMiB": 4560.8671875,
+      "nsfwContentDetected": [
+        false
+      ]
+    }
+  ],
+  "scope": "Generation and input compatibility; does not certify exact finger anatomy or multi-view identity consistency."
+}

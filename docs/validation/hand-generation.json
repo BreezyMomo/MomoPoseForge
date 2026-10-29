@@ -1,0 +1,98 @@
+{
+  "inputZip": "\u624b\u90e8\u6307\u5411\u63a7\u5236\u56fe\u9a8c\u6536 (2).zip",
+  "inputSha256": "3f331ccd8a5c7594082499cca3944a0062a8f64efda3d69547236bca0a009c5c",
+  "view": "current",
+  "inputImageSha256": {
+    "pose": "fa4739e77cdebe7c52f4e30adb9a5c74e2bd9809e4e723ba8d23842a6c2936ba",
+    "depth": "b9b3a73ed38cab231b7d60701de2989a80fa7ed9815ada528f87c609564b8efe",
+    "normal": "7a1758b4fb300a85bae063a06a8205eed98eb1cf3d4d32f057dffc51aeec6411"
+  },
+  "sourceResolution": [
+    768,
+    1024
+  ],
+  "generationResolution": [
+    384,
+    512
+  ],
+  "seed": 20261029,
+  "steps": 24,
+  "prompt": "A close-up studio photograph of an adult person's left hand, pointing with the index finger, other fingers folded, blue sleeve, realistic human skin, neutral light gray background.",
+  "negativePrompt": "robot, mannequin, plastic, armor, mechanical joints, extra limbs, extra fingers, missing fingers, text, watermark",
+  "scheduler": "UniPCMultistepScheduler",
+  "models": {
+    "base": {
+      "repo": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "revision": "451f4fe16113bff5a5d2269ed5ad43b0592e9a14"
+    },
+    "pose": {
+      "repo": "lllyasviel/control_v11p_sd15_openpose",
+      "revision": "9ae9f970358db89e211b87c915f9535c6686d5ba"
+    },
+    "depth": {
+      "repo": "lllyasviel/control_v11f1p_sd15_depth",
+      "revision": "539f99181d33db39cf1af2e517cd8056785f0a87"
+    },
+    "normal": {
+      "repo": "lllyasviel/control_v11p_sd15_normalbae",
+      "revision": "cb7296e6587a219068e9d65864e38729cd862aa8"
+    }
+  },
+  "runtime": {
+    "torch": "2.5.1+cu121",
+    "diffusers": "0.35.2",
+    "transformers": "4.44.2",
+    "gpu": "NVIDIA GeForce RTX 4070"
+  },
+  "results": [
+    {
+      "controls": [
+        "pose"
+      ],
+      "scales": [
+        0.9
+      ],
+      "output": "current-pose.png",
+      "seconds": 4.763763299997663,
+      "peakCudaAllocatedMiB": 3161.2353515625,
+      "nsfwContentDetected": [
+        false
+      ]
+    },
+    {
+      "controls": [
+        "pose",
+        "depth"
+      ],
+      "scales": [
+        0.9,
+        0.5
+      ],
+      "output": "current-pose-depth.png",
+      "seconds": 6.101935500002583,
+      "peakCudaAllocatedMiB": 3857.89892578125,
+      "nsfwContentDetected": [
+        false
+      ]
+    },
+    {
+      "controls": [
+        "pose",
+        "depth",
+        "normal"
+      ],
+      "scales": [
+        0.9,
+        0.5,
+        0.3
+      ],
+      "output": "current-pose-depth-normal.png",
+      "seconds": 6.06998550001299,
+      "peakCudaAllocatedMiB": 4560.8671875,
+      "nsfwContentDetected": [
+        false
+      ]
+    }
+  ],
+  "scope": "Generation and input compatibility; does not certify exact finger anatomy or multi-view identity consistency."
+}

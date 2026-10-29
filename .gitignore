@@ -7,3 +7,5 @@ dist/
 !**/.env.example
 artifacts/
 web/assets-source/
+__pycache__/
+*.pyc

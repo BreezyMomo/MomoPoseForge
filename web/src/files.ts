@@ -3,6 +3,11 @@ import { END_EFFECTORS, DEFAULT_VIEWS } from './types';
 import type { PoseEngine } from './PoseEngine';
 import { CURRENT_MODEL } from './rig';
 import {PerspectiveCamera} from 'three';
+import {NORMAL_CONVENTION} from './renderPasses';
+import {BODY_NAMES,HAND_NAMES,handTolerance} from './poseOutput';
+import {controlnetRecipe} from './controlnetWorkflow';
+import runnerSource from '../../tools/run-controlnet.py?raw';
+import requirementsSource from '../../tools/requirements-controlnet.txt?raw';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -36,22 +41,34 @@ export function download(blob:Blob,name:string){const link=document.createElemen
 export const safeName=(name:string)=>name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g,'-').slice(0,64)||'pose';
 export function saveProject(doc:PoseDocument){download(new Blob([JSON.stringify(doc,null,2)],{type:'application/json'}),`${safeName(doc.name)}.pose.json`);}
 const toBlob=(c:HTMLCanvasElement)=>new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('图片生成失败')),'image/png'));
-export type ExportOptions={scope:'five'|'current';surface:boolean;skeleton:boolean;keypoints:boolean;sheet:boolean;project:boolean;resolution:768|1536;transparent:boolean};
+export type ExportOptions={scope:'five'|'current';surface:boolean;skeleton:boolean;keypoints:boolean;depth:boolean;normal:boolean;sheet:boolean;project:boolean;resolution:768|1536;transparent:boolean;hideOccludedHands:boolean};
 
 export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:AbortSignal,onProgress:(label:string)=>void){
-  const {default:JSZip}=await import('jszip');
-  const doc=engine.snapshot(),zip=new JSZip(),w=options.resolution,h=w*4/3;
+  engine.fly?.stop();
+  const doc=engine.snapshot(),w=options.resolution,h=w*4/3;
   const slots:ViewSlot[]=options.scope==='five'?structuredClone(engine.views):[(()=>{const d=engine.camera.position.clone().sub(engine.orbit.target).normalize();return{id:'current',name:'当前视角',azimuth:Math.atan2(d.x,d.z)*180/Math.PI,elevation:Math.asin(d.y)*180/Math.PI};})()];
+  const cameras=slots.map(slot=>options.scope==='current'?engine.exportCamera(w/h):engine.viewCamera(slot,w/h)),range=engine.depthRange(cameras),world=engine.skeletonData();
+  const {default:JSZip}=await import('jszip');const zip=new JSZip();
   const images:HTMLCanvasElement[]=[],manifestViews=[];
   const check=()=>{if(signal.aborted)throw new DOMException('导出已取消','AbortError');};
   try{
     for(let i=0;i<slots.length;i++){
       check();onProgress(`正在生成${slots[i].name} · ${i+1}/${slots.length}`);
-      const slot=slots[i],camera=options.scope==='current'?engine.exportCamera(w/h):engine.viewCamera(slot,w/h);
+      const slot=slots[i],camera=cameras[i],frame=options.skeleton||options.keypoints?engine.openPose(camera,w,h,options.hideOccludedHands):undefined;
+      const renderOptions={pose:frame,depthRange:range};
       if(options.surface||options.sheet){const canvas=engine.renderImage(slot,w,h,'surface',options.transparent,camera);images.push(canvas);if(options.surface)zip.file(`${slot.id}/mannequin.png`,await toBlob(canvas));}
-      if(options.skeleton)zip.file(`${slot.id}/openpose-coco18.png`,await toBlob(engine.renderImage(slot,w,h,'skeleton',false,camera)));
-      if(options.keypoints)zip.file(`${slot.id}/keypoints-coco18.json`,JSON.stringify({version:1.3,people:[{person_id:[-1],pose_keypoints_2d:engine.keypoints(camera,w,h),face_keypoints_2d:[],hand_left_keypoints_2d:[],hand_right_keypoints_2d:[],pose_keypoints_3d:[],face_keypoints_3d:[],hand_left_keypoints_3d:[],hand_right_keypoints_3d:[]}]},null,2));
-      manifestViews.push({...slot,projection:camera instanceof PerspectiveCamera?'perspective':'orthographic',worldMatrix:camera.matrixWorld.toArray(),projectionMatrix:camera.projectionMatrix.toArray()});
+      if(options.skeleton){
+        zip.file(`${slot.id}/openpose-coco18.png`,await toBlob(engine.renderImage(slot,w,h,'body-skeleton',false,camera,renderOptions)));
+        zip.file(`${slot.id}/openpose-body-hands.png`,await toBlob(engine.renderImage(slot,w,h,'skeleton',false,camera,renderOptions)));
+      }
+      if(options.keypoints){
+        zip.file(`${slot.id}/keypoints-openpose.json`,JSON.stringify(frame,null,2));
+        const legacy=structuredClone(frame!);legacy.people[0].hand_left_keypoints_2d=[];legacy.people[0].hand_right_keypoints_2d=[];
+        zip.file(`${slot.id}/keypoints-coco18.json`,JSON.stringify(legacy,null,2));
+      }
+      for(const kind of ['depth','normal'] as const)if(options[kind])zip.file(`${slot.id}/${kind}.png`,await toBlob(engine.renderImage(slot,w,h,kind,false,camera,renderOptions)));
+      if(options.depth||options.normal)zip.file(`${slot.id}/mask.png`,await toBlob(engine.renderImage(slot,w,h,'mask',false,camera,renderOptions)));
+      manifestViews.push({...slot,projection:camera instanceof PerspectiveCamera?'perspective':'orthographic',near:camera.near,far:camera.far,worldMatrix:camera.matrixWorld.toArray(),projectionMatrix:camera.projectionMatrix.toArray()});
       await new Promise(r=>setTimeout(r,0));
     }
     check();
@@ -64,8 +81,27 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       zip.file('contact-sheet.png',await toBlob(sheet));
     }
     if(options.project)zip.file('project.pose.json',JSON.stringify(doc,null,2));
-    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.1.0',projectVersion:1,rig:doc.rig,width:w,height:h,coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18',keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:'retain valid occluded joints; zero missing/out-of-frame points',viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:true},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
-    zip.file('README.txt','MomoPoseForge 姿态导出\n\n每个视角的 mannequin.png 是人体参考图，openpose-coco18.png 是黑底身体骨架控制图。\nkeypoints-coco18.json 使用 OpenPose COCO18 点序，坐标为该 PNG 的像素，c=1 代表程序生成的有效点；不代表 AI 检测置信度。手指和面部点集未输出。\nproject.pose.json 可在 MomoPoseForge 中重新打开继续编辑。manifest.json 记录相机、图像尺寸与坐标约定。\ncontact-sheet.png 用于查看整组视角；单视角 AI 工作流请使用对应目录内的独立图。\n下游工具须支持相应的骨架图或 JSON 格式，并按其要求载入。本版本未对所有第三方工作流作兼容认证。\n角色资产：Adobe Mixamo X Bot，使用说明见 https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html 。\n');
+    if(options.keypoints)zip.file('skeleton-world.json',JSON.stringify(world,null,2));
+    if(options.skeleton||options.depth||options.normal){
+      const recipe=controlnetRecipe(slots.map(s=>s.id),options,options.scope==='current'&&engine.handDetail?{side:engine.handDetail,shape:engine.hands[engine.handDetail]}:undefined);
+      zip.file('workflow-controlnet.json',JSON.stringify(recipe,null,2));zip.file('tools/run-controlnet.py',runnerSource);zip.file('tools/requirements-controlnet.txt',requirementsSource);zip.file('workflows/controlnet-models.json',JSON.stringify(recipe.models,null,2));
+    }
+    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.2.0',exportVersion:2,projectVersion:1,rig:doc.rig,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18 + 2 x HAND21',pointOrder:{body:BODY_NAMES,hand:HAND_NAMES},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five'},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
+    zip.file('README.txt',[
+      'MomoPoseForge 姿态导出 v2','',
+      '每个视角：mannequin.png 是素体参考；openpose-body-hands.png 是身体 COCO18 + 双手各21点的黑底骨架控制图。',
+      'keypoints-openpose.json 使用 OpenPose 1.3 字段，像素坐标 x,y,c；每手从手腕开始，依次为拇指、食指、中指、无名指、小指，每指4点。',
+      'c=1 是程序生成的有效点，不是 AI 检测置信度。出画面点为0；手部按所选遮挡设置过滤，判断容差见 manifest.json。未输出面部点集。',
+      'openpose-coco18.png 和 keypoints-coco18.json 是保留的身体18点兼容文件。skeleton-world.json 是完整身体/手部的米制三维坐标，不是 OpenPose 的三角测量结果。',
+      'depth.png：相机轴向深度线性归一化，近白远黑，五视图共用范围；normal.png：相机表面法线的 ControlNet 1.1 / ScanNet 可视化约定。数据图不含灯光、色调映射或 sRGB 转换。',
+      'mask.png：白色是角色，黑色是背景。用它区分深度/法线图的背景；相机和深度范围完整记录在 manifest.json。',
+      'workflow-controlnet.json 提供固定模型版本、通道权重、种子和384x512生成配置。ZIP 同时附带 tools/run-controlnet.py、依赖清单和模型版本清单。',
+      '本地复现：解压本 ZIP，在解压目录中创建 Python 虚拟环境，安装匹配显卡的 CUDA PyTorch，再 pip install -r tools/requirements-controlnet.txt；运行 python tools/run-controlnet.py 原ZIP路径 --ablation。首次运行下载约5GB公开模型，需要CUDA显卡。',
+      '可用 --view 选择视角、--prompt 修改人物/服装描述、--seed 固定随机种子；--model-cache 指定模型缓存。已有模型时加 --offline。直接使用控制图，不要再做姿态/深度/法线估计。',
+      '真实生成仍取决于所选模型和权重；X Bot 分段几何会进入深度/法线图，独立生成不同视角不会自动保证角色身份一致。',
+      'project.pose.json 可重新打开编辑；contact-sheet.png 只用于整组查看，单视角工作流使用该视角目录内的独立图。',
+      '角色资产：Adobe Mixamo X Bot，https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html 。','',
+    ].join('\n'));
     onProgress('正在打包文件');check();const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},()=>check());check();download(blob,`${safeName(doc.name)}.zip`);
   }finally{engine.apply(doc);}
 }

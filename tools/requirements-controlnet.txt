@@ -1,0 +1,7 @@
+# Install in a virtual environment; CUDA PyTorch is installed separately.
+diffusers==0.35.2
+transformers==4.44.2
+accelerate==1.10.1
+huggingface-hub==0.35.3
+safetensors==0.6.2
+Pillow>=10,<13

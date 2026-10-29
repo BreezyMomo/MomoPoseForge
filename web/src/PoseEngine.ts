@@ -10,14 +10,14 @@ import {FlyCameraControls,perspectiveForNavigation,cloneExportCamera} from './Fl
 import {emptyHandValues,fingerPart,fingerAxes,fingerAngles,fingerRotation,forearmAngles,forearmRotation,twistAngle} from './articulation';
 import {LIMB_LIMITS,constrainLimb,limbAxes} from './limbLimits';
 import {LOCAL_AXES,solveConstrainedIK,captureJoints,restoreJoints,interpolateJoints,goalError,type PositionGoal,type SolverJoint} from './fullBodyIK';
+import {COCO_LINKS,COCO_COLORS,HAND_LINKS,handBones,projectPose,paintSkeleton,worldSkeleton,depthVisibility,type OpenPoseFrame} from './poseOutput';
+import {depthRangeFor,dataMaterial,type DepthRange,type RenderKind,type DataKind} from './renderPasses';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
   LeftHand: ['LeftArm', 'LeftForeArm', 'LeftHand'], RightHand: ['RightArm', 'RightForeArm', 'RightHand'],
   LeftFoot: ['LeftUpLeg', 'LeftLeg', 'LeftFoot'], RightFoot: ['RightUpLeg', 'RightLeg', 'RightFoot'],
 };
-const COCO_LINKS = [[1,2],[1,5],[2,3],[3,4],[5,6],[6,7],[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[1,0],[0,14],[14,16],[0,15],[15,17]];
-const COCO_COLORS = ['#ff0000','#ff5500','#ffaa00','#ffff00','#aaff00','#55ff00','#00ff00','#00ff55','#00ffaa','#00ffff','#00aaff','#0055ff','#0000ff','#5500ff','#aa00ff','#ff00ff','#ff00aa','#ff0055'];
 const asVec = (v: THREE.Vector3): Vec3 => v.toArray() as Vec3;
 
 export class PoseEngine {
@@ -150,7 +150,7 @@ export class PoseEngine {
         this.vertexCount += obj.geometry.attributes.position.count;
       }
     });
-    for (const name of Object.values(CHAINS).flat()) if (!this.bones[name]) throw new Error(`人体缺少骨骼 ${name}`);
+    for (const name of [...Object.values(CHAINS).flat(),...handBones('Left'),...handBones('Right')]) if (!this.bones[name]) throw new Error(`人体缺少骨骼 ${name}`);
     this.model.updateMatrixWorld(true);
     for (const end of END_EFFECTORS) {
       this.targets[end] = asVec(this.world(end));
@@ -575,6 +575,7 @@ export class PoseEngine {
     const pts=this.cocoWorld();
     COCO_LINKS.forEach(([a,b],i)=>{const g=new THREE.BufferGeometry().setFromPoints([pts[a],pts[b]]);this.boneDisplay.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:COCO_COLORS[i]})));});
     pts.forEach((p,i)=>{const s=new THREE.Mesh(new THREE.SphereGeometry(.012,8,8),new THREE.MeshBasicMaterial({color:COCO_COLORS[i]}));s.position.copy(p);this.boneDisplay.add(s);});
+    for(const side of ['Left','Right'] as const){const points=this.handWorld(side);for(const[a,b]of HAND_LINKS){const geometry=new THREE.BufferGeometry().setFromPoints([points[a],points[b]]);this.boneDisplay.add(new THREE.Line(geometry,new THREE.LineBasicMaterial({color:'#d8bb77'})));}}
   }
 
   fit(updateCamera=true){
@@ -616,27 +617,40 @@ export class PoseEngine {
     camera.updateMatrixWorld();return this.cocoWorld().flatMap(p=>{const point=projectPoint(p,camera,width,height);return point.valid?[Number(point.x.toFixed(3)),Number(point.y.toFixed(3)),1]:[0,0,0];});
   }
 
-  renderImage(slot:ViewSlot,width:number,height:number,kind:'surface'|'skeleton',transparent=false,viewCamera?:THREE.Camera):HTMLCanvasElement{
+  handWorld(side:Side){return handBones(side).map(name=>this.world(name));}
+  worldPose(){this.model.updateWorldMatrix(true,true);return {body:this.cocoWorld(),Left:this.handWorld('Left'),Right:this.handWorld('Right')};}
+  skeletonData(){return worldSkeleton(this.worldPose());}
+  depthRange(cameras:THREE.Camera[]){this.model.updateWorldMatrix(true,true);return depthRangeFor(new THREE.Box3().setFromObject(this.model,true),cameras);}
+  openPose(camera:THREE.Camera,width:number,height:number,hideOccludedHands=true){
+    camera.updateMatrixWorld();const pose=this.worldPose();if(!hideOccludedHands)return projectPose(pose,camera,width,height);
+    const range=this.depthRange([camera]),pixels=this.renderPixels(camera,width,height,'visibility',false,range),visible=depthVisibility(pixels,camera,width,height,range);
+    return projectPose(pose,camera,width,height,visible);
+  }
+
+  renderImage(slot:ViewSlot,width:number,height:number,kind:RenderKind,transparent=false,viewCamera?:THREE.Camera,options?:{pose?:OpenPoseFrame;depthRange?:DepthRange;hideOccludedHands?:boolean}):HTMLCanvasElement{
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d')!;
     const camera=viewCamera??this.viewCamera(slot,width/height);
-    if(kind==='skeleton'){
-      ctx.fillStyle='#000000';ctx.fillRect(0,0,width,height);const k=this.keypoints(camera,width,height);
-      ctx.lineWidth=Math.max(2,height*.005);ctx.lineCap='round';
-      COCO_LINKS.forEach(([a,b],i)=>{if(!k[a*3+2]||!k[b*3+2])return;ctx.strokeStyle=COCO_COLORS[i];ctx.beginPath();ctx.moveTo(k[a*3],k[a*3+1]);ctx.lineTo(k[b*3],k[b*3+1]);ctx.stroke();});
-      for(let i=0;i<18;i++){if(!k[i*3+2])continue;ctx.fillStyle=COCO_COLORS[i];ctx.beginPath();ctx.arc(k[i*3],k[i*3+1],Math.max(2,height*.005),0,Math.PI*2);ctx.fill();}
-      return canvas;
+    if(kind==='skeleton'||kind==='body-skeleton'){
+      const pose=options?.pose??this.openPose(camera,width,height,kind==='skeleton'&&(options?.hideOccludedHands??true));paintSkeleton(ctx,pose,kind==='skeleton');return canvas;
     }
-    const prev={background:this.scene.background,model:this.model.visible,helpers:this.helpers.visible,gizmo:this.transform.getHelper().visible,grid:this.grid.visible,ground:this.groundMesh.visible,bones:this.boneDisplay.visible,target:this.renderer.getRenderTarget()};
-    const target=new THREE.WebGLRenderTarget(width,height,{samples:4});target.texture.colorSpace=THREE.SRGBColorSpace;
+    const pixels=this.renderPixels(camera,width,height,kind,transparent,options?.depthRange??(kind==='depth'?this.depthRange([camera]):{near:.01,far:10}));
+    const image=ctx.createImageData(width,height),row=width*4;for(let y=0;y<height;y++)image.data.set(pixels.subarray((height-y-1)*row,(height-y)*row),y*row);ctx.putImageData(image,0,0);return canvas;
+  }
+
+  private renderPixels(camera:THREE.Camera,width:number,height:number,kind:'surface'|DataKind,transparent=false,range:DepthRange={near:.01,far:10}){
+    const prev={background:this.scene.background,override:this.scene.overrideMaterial,model:this.model.visible,helpers:this.helpers.visible,gizmo:this.transform.getHelper().visible,grid:this.grid.visible,ground:this.groundMesh.visible,bones:this.boneDisplay.visible,target:this.renderer.getRenderTarget(),alpha:this.renderer.getClearAlpha(),toneMapping:this.renderer.toneMapping};
+    const data=kind!=='surface',material=data?dataMaterial(kind,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,range):null;
+    const target=new THREE.WebGLRenderTarget(width,height,{samples:data?0:4});target.texture.colorSpace=data?THREE.NoColorSpace:THREE.SRGBColorSpace;
+    const debug=this.renderer.debug,previousShaderError=debug?.onShaderError;
     try{
-      this.scene.background=transparent?null:new THREE.Color('#e7e8e5');this.helpers.visible=false;this.transform.getHelper().visible=false;this.grid.visible=false;this.boneDisplay.visible=false;this.model.visible=true;this.groundMesh.visible=false;
-      this.renderer.setClearAlpha(transparent?0:1);this.renderer.setRenderTarget(target);this.renderer.render(this.scene,camera);
+      if(debug)debug.onShaderError=(gl,program,vertex,fragment)=>{previousShaderError?.(gl,program,vertex,fragment);throw new Error('控制图着色器编译失败，请检查浏览器 WebGL 支持');};
+      this.scene.background=data?new THREE.Color(0):transparent?null:new THREE.Color('#e7e8e5');this.scene.overrideMaterial=material;if(data)this.renderer.toneMapping=THREE.NoToneMapping;
+      this.helpers.visible=false;this.transform.getHelper().visible=false;this.grid.visible=false;this.boneDisplay.visible=false;this.model.visible=true;this.groundMesh.visible=false;
+      this.renderer.setClearAlpha(data?1:transparent?0:1);this.renderer.setRenderTarget(target);this.renderer.render(this.scene,camera);
       const buffer=new Uint8Array(width*height*4);this.renderer.readRenderTargetPixels(target,0,0,width,height,buffer);
-      const image=ctx.createImageData(width,height),row=width*4;
-      for(let y=0;y<height;y++)image.data.set(buffer.subarray((height-y-1)*row,(height-y)*row),y*row);
-      ctx.putImageData(image,0,0);return canvas;
+      return buffer;
     }finally{
-      this.scene.background=prev.background;this.model.visible=prev.model;this.helpers.visible=prev.helpers;this.transform.getHelper().visible=prev.gizmo;this.grid.visible=prev.grid;this.groundMesh.visible=prev.ground;this.boneDisplay.visible=prev.bones;this.renderer.setRenderTarget(prev.target);this.renderer.setClearAlpha(1);target.dispose();
+      this.scene.background=prev.background;this.scene.overrideMaterial=prev.override;this.model.visible=prev.model;this.helpers.visible=prev.helpers;this.transform.getHelper().visible=prev.gizmo;this.grid.visible=prev.grid;this.groundMesh.visible=prev.ground;this.boneDisplay.visible=prev.bones;this.renderer.setRenderTarget(prev.target);this.renderer.setClearAlpha(prev.alpha);this.renderer.toneMapping=prev.toneMapping;if(debug)debug.onShaderError=previousShaderError;target.dispose();material?.dispose();
     }
   }
   exportCamera(aspect:number){return cloneExportCamera(this.camera,aspect);}
