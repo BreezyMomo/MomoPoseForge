@@ -1,6 +1,6 @@
 import {Camera,Euler,MathUtils,OrthographicCamera,PerspectiveCamera,Vector3} from 'three';
 
-const MOVE_KEYS=new Set(['KeyW','KeyA','KeyS','KeyD']);
+const MOVE_KEYS=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
 const editable=(target:EventTarget|null)=>!!(target as HTMLElement|null)?.closest?.('input,textarea,select,[contenteditable="true"],dialog[open]');
 
 export function flyTranslation(camera:Camera,keys:ReadonlySet<string>,seconds:number,fast=false){
@@ -8,6 +8,7 @@ export function flyTranslation(camera:Camera,keys:ReadonlySet<string>,seconds:nu
   const right=new Vector3(1,0,0).applyQuaternion(camera.quaternion);
   return forward.multiplyScalar(Number(keys.has('KeyW'))-Number(keys.has('KeyS')))
     .addScaledVector(right,Number(keys.has('KeyD'))-Number(keys.has('KeyA')))
+    .addScaledVector(new Vector3(0,1,0),Number(keys.has('KeyE'))-Number(keys.has('KeyQ')))
     .normalize().multiplyScalar(MathUtils.clamp(seconds,0,.05)*1.2*(fast?3:1));
 }
 

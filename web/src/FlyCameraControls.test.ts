@@ -23,6 +23,18 @@ describe('右键飞行镜头的输入生命周期',()=>{
     expect(f.send(f.host,'keydown',{code:'KeyW'}).defaultPrevented).toBe(false);f.controls.update(.05);
     expect(f.camera.position.equals(before)).toBe(true);f.controls.dispose();
   });
+  for(const [key,direction]of [['KeyQ',-1],['KeyE',1]] as const)it(`右键加 ${key} 沿世界竖轴移动，松开按键立即停止，退出后恢复普通快捷键`,()=>{
+    const f=fixture(),before=f.camera.position.clone();
+    expect(f.send(f.host,'keydown',{code:key}).defaultPrevented).toBe(false);f.controls.update(.05);expect(f.camera.position.equals(before)).toBe(true);
+    f.start();expect(f.send(f.host,'keydown',{code:key}).defaultPrevented).toBe(true);f.controls.update(.05);expect(f.camera.position.y).toBeCloseTo(before.y+direction*.06,10);expect(f.camera.position.x).toBe(before.x);expect(f.camera.position.z).toBe(before.z);
+    expect(f.send(f.host,'keyup',{code:key}).defaultPrevented).toBe(true);const stopped=f.camera.position.clone();f.controls.update(.05);expect(f.camera.position.equals(stopped)).toBe(true);
+    f.send(f.host,'keydown',{code:key});f.send(f.host,'pointerup',{button:2});f.start();f.controls.update(.05);expect(f.camera.position.equals(stopped)).toBe(true);f.controls.stop();expect(f.send(f.host,'keydown',{code:key}).defaultPrevented).toBe(false);f.controls.dispose();
+  });
+  it('升降键遵守观察锁、输入框和失焦停止规则',()=>{
+    const f=fixture(),before=f.camera.position.clone();f.activity.mockReturnValue(false);f.send(f.host,'keydown',{code:'KeyE'});f.start();f.controls.update(.05);expect(f.camera.position.equals(before)).toBe(true);f.controls.stop();
+    f.activity.mockReturnValue(undefined);Object.assign(f.host,{closest:()=>({})});f.send(f.host,'keydown',{code:'KeyQ'});Object.assign(f.host,{closest:()=>null});f.start();f.controls.update(.05);expect(f.camera.position.equals(before)).toBe(true);
+    f.send(f.host,'keydown',{code:'KeyE'});f.send(f.host,'blur');f.controls.update(.05);f.start();f.controls.update(.05);expect(f.camera.position.equals(before)).toBe(true);f.controls.dispose();
+  });
   it('按住右键与 W 持续前进，松开 W 立即停下',()=>{
     const f=fixture();f.start();expect(f.controls.active).toBe(true);expect(f.focus).toHaveBeenCalled();
     expect(f.send(f.host,'keydown',{code:'KeyW'}).defaultPrevented).toBe(true);
@@ -60,6 +72,12 @@ describe('右键飞行镜头的输入生命周期',()=>{
 });
 
 describe('飞行方向与相机投影',()=>{
+  it('Q 下 E 上不随相机俯仰、偏航或侧倾改变；对向抵消，组合键不加速',()=>{
+    const c=new PerspectiveCamera();c.rotation.set(.8,1.1,.3);c.updateMatrixWorld(true);
+    const up=flyTranslation(c,new Set(['KeyE']),.05),down=flyTranslation(c,new Set(['KeyQ']),.05);
+    expect(up.equals(new Vector3(0,.06,0))).toBe(true);expect(down.equals(new Vector3(0,-.06,0))).toBe(true);expect(flyTranslation(c,new Set(['KeyQ','KeyE']),.05).length()).toBe(0);
+    expect(flyTranslation(c,new Set(['KeyW','KeyD','KeyE']),.05).length()).toBeCloseTo(.06,10);expect(flyTranslation(c,new Set(['KeyE']),.05,true).y).toBeCloseTo(.18,10);expect(flyTranslation(c,new Set(['KeyQ']),100).y).toBeCloseTo(-.06,10);
+  });
   it('WASD 随镜头朝向，斜向不加速，Shift 加速，长帧不跳跃',()=>{
     const c=new PerspectiveCamera();c.rotation.y=Math.PI/2;c.updateMatrixWorld(true);
     const w=flyTranslation(c,new Set(['KeyW']),.05),d=flyTranslation(c,new Set(['KeyD']),.05),diagonal=flyTranslation(c,new Set(['KeyW','KeyD']),.05);

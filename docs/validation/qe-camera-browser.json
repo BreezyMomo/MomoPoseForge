@@ -1,0 +1,18 @@
+{
+  "eDisplacementMetres": [
+    0.0,
+    0.6105600000000035,
+    0.0
+  ],
+  "qDisplacementMetres": [
+    0.0,
+    -0.6065999999999998,
+    0.0
+  ],
+  "maximumQuaternionComponentDifference": 1.3877787807814457e-17,
+  "bodyUnchanged": true,
+  "pinsUnchanged": true,
+  "releasedKeyboardDoesNotMoveCamera": true,
+  "moveShortcutRestored": true,
+  "rotateShortcutRestored": true
+}
