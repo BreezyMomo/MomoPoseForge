@@ -65,6 +65,11 @@ export function solveSpineTarget(bones:Record<string,Bone>,target:Vector3,rest:R
 }
 
 export function controlDescription(name:string){
+  if(/^(Left|Right)(Thumb|Index|Middle|Ring|Little)[123]$/.test(name))return {label:'手指关节',help:'使用下方手指精调逐节弯曲和张开，也可用旋转控制器调整。'};
+  if(name.endsWith('ToeBase'))return {label:'脚趾弯曲',help:'控制前脚掌抬起或下弯，脚踝位置保持不变。'};
+  if(name.endsWith('Shoulder'))return {label:'肩部旋转',help:'旋转锁骨带动上臂；需要固定手位时先固定对应的手。'};
+  if(name.endsWith('Arm')&&!name.endsWith('ForeArm'))return {label:'上臂旋转',help:'旋转上臂调整手臂方向；手脚固定的 IK 目标优先。'};
+  if(name.endsWith('UpLeg'))return {label:'髋部旋转',help:'旋转髋部带动整条腿；固定脚后优先保持脚的目标位置。'};
   if(name.endsWith('Hand')||name.endsWith('Foot'))return {label:'手脚 IK',help:'移动控制整条手臂或腿；切换旋转可调整手掌、脚掌朝向。'};
   if(name==='Hips')return {label:'骨盆移动',help:'移动身体根部；开启固定的手脚保持原位置。'};
   if(name==='Chest')return {label:'胸腔弯曲',help:'移动调整前后弯与侧弯，保留当前扭转；转身请切换旋转。'};

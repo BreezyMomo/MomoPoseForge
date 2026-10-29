@@ -3,10 +3,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { solveTwoBone, solveLimbRotations, projectPoint } from './math';
-import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
+import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, BODY_PART_NAMES, FINGER_PART_NAMES, DIGITS, type Digit, type Side, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
 import { CURRENT_MODEL } from './rig';
 import {JOINT_LIMITS,constrainJointRotation,solveSpineTarget} from './poseControls';
 import {FlyCameraControls,perspectiveForNavigation,cloneExportCamera} from './FlyCameraControls';
+import {emptyHandValues,fingerPart,fingerAxes,fingerAngles,fingerRotation,forearmAngles,forearmRotation,twistAngle} from './articulation';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const CHAINS: Record<string, [string, string, string]> = {
@@ -46,7 +47,8 @@ export class PoseEngine {
   view = 'free';
   warning = '';
   ready = false;
-  moreControls = false;
+  moreControls = true;
+  handDetail:Side|null=null;
   center = new V(0,.85,0);
   span = 1.98;
   vertexCount = 0;
@@ -152,8 +154,10 @@ export class PoseEngine {
       this.poles[end] = asVec(b.add(new V(0,0,end.endsWith('Hand')?-.5:.5)));
     }
     this.rest = this.snapshot();
-    for (const name of ['LeftHand','RightHand','LeftFoot','RightFoot','Hips','Chest','Head','LeftForeArm','RightForeArm','LeftLeg','RightLeg']) {
-      const handle = new THREE.Mesh(new THREE.SphereGeometry(.022,16,12), new THREE.MeshBasicMaterial({ color:'#b1b6b6', depthTest:false, transparent:true, opacity:.9 }));
+    for (const name of Object.keys(PART_NAMES)) {
+      if(!this.bones[name])continue;
+      const radius=fingerPart(name) ? .0065 : END_EFFECTORS.includes(name as Effector) ? .022 : .016;
+      const handle = new THREE.Mesh(new THREE.SphereGeometry(radius,12,8), new THREE.MeshBasicMaterial({ color:'#b1b6b6', depthTest:false, transparent:true, opacity:.9 }));
       handle.userData.part = name; handle.renderOrder = 100; this.helpers.add(handle); this.handles.push(handle);
     }
     this.ready = true;
@@ -172,14 +176,27 @@ export class PoseEngine {
     const bone=this.bones[name],upper=new V().fromArray(this.rest.joints[name].position).normalize(),lower=new V().fromArray(this.rest.joints[entry[2]].position).normalize();
     const axis=this.hingeAxis(name);
     const restBend=Math.atan2(axis.dot(new V().crossVectors(upper,lower)),THREE.MathUtils.clamp(upper.dot(lower),-1,1)),q=bone.quaternion;
-    let angle=2*Math.atan2(new V(q.x,q.y,q.z).dot(axis),q.w);
+    const arm=name.endsWith('ForeArm'),articulation=arm?forearmAngles(q,axis,lower):null;
+    let angle=articulation?.bend??2*Math.atan2(new V(q.x,q.y,q.z).dot(axis),q.w);
     if(angle>Math.PI)angle-=2*Math.PI;if(angle< -Math.PI)angle+=2*Math.PI;
     angle=THREE.MathUtils.clamp(angle,-restBend,THREE.MathUtils.degToRad(name.endsWith('Leg')?150:155)-restBend);
-    bone.quaternion.setFromAxisAngle(axis,angle);bone.updateWorldMatrix(false,true);
+    if(arm)bone.quaternion.copy(forearmRotation(angle,articulation!.twist,axis,lower));else bone.quaternion.setFromAxisAngle(axis,angle);
+    bone.updateWorldMatrix(false,true);
   }
 
   private limitJoint(name:string){
     this.limitHinge(name);
+    const digit=fingerPart(name);
+    if(digit&&this.rest){
+      const axes=fingerAxes(this.rest.joints,digit[1] as Side,digit[2] as Digit,Number(digit[3]),this.profile.handCurlNormalSign);
+      const bone=this.bones[name],angles=fingerAngles(bone.quaternion,axes),limited=fingerRotation(digit[2] as Digit,Number(digit[3]),angles.curl,angles.spread,axes);
+      if(bone.quaternion.angleTo(limited)>1e-5)this.warning=`${PART_NAMES[name]}已到角度范围边界`;
+      bone.quaternion.copy(limited);bone.updateWorldMatrix(false,true);
+    }
+    if(name.endsWith('ToeBase')){
+      const bone=this.bones[name],angle=THREE.MathUtils.clamp(twistAngle(bone.quaternion,new V(1,0,0)),THREE.MathUtils.degToRad(-45),THREE.MathUtils.degToRad(65));
+      bone.quaternion.setFromAxisAngle(new V(1,0,0),angle);bone.updateWorldMatrix(false,true);
+    }
     if(!JOINT_LIMITS[name]||!this.rest)return;
     const bone=this.bones[name],limited=constrainJointRotation(name,bone.quaternion,new Q().fromArray(this.rest.joints[name].quaternion));
     if(bone.quaternion.angleTo(limited)>1e-5)this.warning=`${PART_NAMES[name]}已到角度范围边界`;
@@ -190,10 +207,13 @@ export class PoseEngine {
     const chain = CHAINS[end]; if (!chain) return;
     const [a,b,c] = chain;
     const start = this.world(a), mid = this.world(b), last = this.world(c),endOrientation=this.bones[c].getWorldQuaternion(new Q());
+    const roll=b.endsWith('ForeArm')?forearmAngles(this.bones[b].quaternion,this.hingeAxis(b),new V().fromArray(this.rest.joints[c].position)).twist:0;
     const result = solveTwoBone(start,target,pole ?? new V().fromArray(this.poles[end]),start.distanceTo(mid),mid.distanceTo(last),end.endsWith('Foot') ? 150:155);
     const rotations=solveLimbRotations(new V().fromArray(this.rest.joints[b].position),new V().fromArray(this.rest.joints[c].position),this.hingeAxis(b),result.elbow.clone().sub(start),result.end.clone().sub(result.elbow),end.endsWith('Foot')?150:155);
     this.setWorldQuaternion(this.bones[a],rotations.upperWorld);
-    this.bones[b].quaternion.copy(rotations.lowerLocal);this.bones[b].updateWorldMatrix(false,true);
+    this.bones[b].quaternion.copy(rotations.lowerLocal);
+    if(b.endsWith('ForeArm'))this.bones[b].quaternion.multiply(new Q().setFromAxisAngle(new V().fromArray(this.rest.joints[c].position).normalize(),roll));
+    this.bones[b].updateWorldMatrix(false,true);
     if(preserveEndOrientation)this.setWorldQuaternion(this.bones[c],endOrientation);
     if (result.error > .009) this.warning = `${PART_NAMES[end]}目标超出当前可达范围`;
     return result;
@@ -216,6 +236,7 @@ export class PoseEngine {
     if (this.mode === 'rotate') {
       this.setWorldQuaternion(bone,this.gizmo.quaternion);
       this.limitJoint(this.selected);
+      this.markCustomHand(this.selected);
       if (this.pins[this.selected as Effector]) {
         this.pins[this.selected as Effector]!.quaternion = this.gizmo.quaternion.toArray();
       }
@@ -252,6 +273,7 @@ export class PoseEngine {
   select(name: string) {
     if(!this.bones[name])return;
     this.selected=name;this.warning='';
+    const digit=fingerPart(name);if(digit)this.handDetail=digit[1] as Side;else if(this.handDetail){this.handDetail=null;if(this.ready)this.focus();}
     this.setMode(this.canTranslate(name)?'translate':'rotate');
     this.syncGizmo(); this.transform.attach(this.gizmo); this.update(false);
   }
@@ -266,6 +288,14 @@ export class PoseEngine {
     this.suppress=false;
   }
   setMore(value:boolean){this.moreControls=value;this.update(false);}
+  setHandDetail(side:Side|null){const previous=this.handDetail;this.handDetail=side;if(side)this.select(`${side}Index1`);else if(fingerPart(this.selected)&&previous)this.select(`${previous}Hand`);this.update(false);}
+  focusHand(side:Side){
+    if(!this.bones[`${side}Hand`])return;
+    this.fly?.stop();const center=this.world(`${side}Hand`);for(const digit of DIGITS)center.add(this.world(`${side}${digit}2`));center.divideScalar(6);
+    const direction=this.camera.position.clone().sub(this.orbit.target).normalize();this.view='free';
+    this.camera=new THREE.PerspectiveCamera(35,this.host.clientWidth/Math.max(1,this.host.clientHeight),.01,100);
+    this.camera.position.copy(center).addScaledVector(direction,.52);this.camera.lookAt(center);this.orbit.object=this.camera;this.orbit.target.copy(center);this.transform.camera=this.camera;this.orbit.update();this.onInfo(this.info());
+  }
   setDisplay(mode:'surface'|'skeleton'){this.display=mode;this.model.visible=mode==='surface';this.boneDisplay.visible=mode==='skeleton';this.update(false);}
   setGrid(value:boolean){this.grid.visible=value;}
   setGround(value:boolean){this.ground=value;this.commit();}
@@ -283,31 +313,53 @@ export class PoseEngine {
     this.mode='translate';this.transform.setMode('translate');this.manipulate();this.update(true);this.syncGizmo();this.commit();
   }
   setSelectedRotation(axis:number,value:number){
-    if(!Number.isFinite(value))return;
+    if(!Number.isFinite(value)||!this.bones[this.selected])return;
     const bone=this.bones[this.selected],e=new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ');
     const a=e.toArray() as [number,number,number,THREE.EulerOrder];a[axis]=THREE.MathUtils.degToRad(THREE.MathUtils.clamp(value,-180,180));
     this.warning='';bone.quaternion.setFromEuler(new THREE.Euler(a[0],a[1],a[2],'XYZ'));bone.updateWorldMatrix(false,true);this.limitJoint(this.selected);
+    this.markCustomHand(this.selected);
     this.solvePins();this.syncTargets();this.update(false);this.syncGizmo();this.commit();
   }
   private applyHandShape(side:'Left'|'Right',shape:string){
     this.hands[side]=shape;
-    const index=new V().fromArray(this.rest.joints[`${side}Index1`].position),little=new V().fromArray(this.rest.joints[`${side}Little1`].position);
-    const palmNormal=new V().crossVectors(index,little).normalize();if(side==='Right')palmNormal.negate();
-    palmNormal.multiplyScalar(this.profile.handCurlNormalSign??1);
-    for(const digit of ['Thumb','Index','Middle','Ring','Little'])for(let i=1;i<=3;i++){
+    for(const digit of DIGITS)for(let i=1;i<=3;i++){
       const bone=this.bones[`${side}${digit}${i}`];if(!bone)continue;
       bone.quaternion.fromArray(this.rest.joints[bone.name].quaternion);
       const curl=shape==='握拳'?(digit==='Thumb'?.45:1.0):shape==='指向'?(digit==='Index'?0:.95):0;
-      const next=this.rest.joints[`${side}${digit}${Math.min(3,i+1)}`],direction=new V().fromArray(next.position).normalize();
-      const axis=new V().crossVectors(direction,palmNormal).normalize();
-      bone.quaternion.multiply(new Q().setFromAxisAngle(axis,curl));
+      bone.quaternion.copy(fingerRotation(digit,i,curl,0,fingerAxes(this.rest.joints,side,digit,i,this.profile.handCurlNormalSign)));
     }
   }
+  private markCustomHand(name:string){const digit=fingerPart(name);if(digit)this.hands[digit[1] as Side]='自定义';}
+  setFinger(side:Side,digit:Digit,joint:number,value:number,kind:'curl'|'spread',commit=true){
+    if(!this.rest||!Number.isFinite(value)||!DIGITS.includes(digit)||![1,2,3].includes(joint))return;
+    const name=`${side}${digit}${joint}`,bone=this.bones[name],axes=fingerAxes(this.rest.joints,side,digit,joint,this.profile.handCurlNormalSign),angles=fingerAngles(bone.quaternion,axes);
+    bone.quaternion.copy(fingerRotation(digit,joint,kind==='curl'?THREE.MathUtils.degToRad(value):angles.curl,kind==='spread'?THREE.MathUtils.degToRad(value):angles.spread,axes));bone.updateWorldMatrix(false,true);
+    this.markCustomHand(name);this.update(false);this.syncGizmo();if(commit)this.commit();
+  }
+  setForearmTwist(side:Side,value:number,commit=true){
+    if(!this.rest||!Number.isFinite(value))return;
+    const name=`${side}ForeArm`,bone=this.bones[name],axis=this.hingeAxis(name),lower=new V().fromArray(this.rest.joints[`${side}Hand`].position);
+    const angles=forearmAngles(bone.quaternion,axis,lower);bone.quaternion.copy(forearmRotation(angles.bend,THREE.MathUtils.degToRad(value),axis,lower));bone.updateWorldMatrix(false,true);
+    this.solvePins();this.syncTargets();this.update(false);this.syncGizmo();if(commit)this.commit();
+  }
+  setToeBend(side:Side,value:number,commit=true){
+    if(!this.bones[`${side}ToeBase`]||!Number.isFinite(value))return;const name=`${side}ToeBase`;
+    this.bones[name].quaternion.setFromAxisAngle(new V(1,0,0),THREE.MathUtils.degToRad(value));this.limitJoint(name);this.update(false);this.syncGizmo();if(commit)this.commit();
+  }
+  private readHand(side:Side){
+    const values=emptyHandValues();if(!this.rest)return values;
+    for(const digit of DIGITS)for(let i=1;i<=3;i++){
+      const angles=fingerAngles(this.bones[`${side}${digit}${i}`].quaternion,fingerAxes(this.rest.joints,side,digit,i,this.profile.handCurlNormalSign));
+      values[digit].curl[i-1]=THREE.MathUtils.radToDeg(angles.curl);if(i===1)values[digit].spread=THREE.MathUtils.radToDeg(angles.spread);
+    }return values;
+  }
+  private readForearm(side:Side){if(!this.rest)return 0;const name=`${side}ForeArm`;return THREE.MathUtils.radToDeg(forearmAngles(this.bones[name].quaternion,this.hingeAxis(name),new V().fromArray(this.rest.joints[`${side}Hand`].position)).twist);}
   setHand(side:'Left'|'Right',shape:string){
+    if(!this.rest)return;
     this.applyHandShape(side,shape);
     this.update(true);this.commit();
   }
-  resetSelected(){const rest=this.rest.joints[this.selected];if(!rest)return;this.bones[this.selected].quaternion.fromArray(rest.quaternion);this.bones[this.selected].position.fromArray(rest.position);delete this.pins[this.selected as Effector];this.syncTargets();this.update(true);this.syncGizmo();this.commit();}
+  resetSelected(){const rest=this.rest.joints[this.selected];if(!rest)return;this.bones[this.selected].quaternion.fromArray(rest.quaternion);this.bones[this.selected].position.fromArray(rest.position);this.markCustomHand(this.selected);delete this.pins[this.selected as Effector];this.syncTargets();this.update(true);this.syncGizmo();this.commit();}
 
   applyPreset(preset:Preset,commit=true){
     const views=this.views,name=this.name;
@@ -373,7 +425,7 @@ export class PoseEngine {
     this.suppress=true;this.warning='';this.name=doc.name;this.views=structuredClone(doc.views);this.ground=doc.ground;
     this.model.position.fromArray(doc.root.position);this.model.quaternion.fromArray(doc.root.quaternion);
     for(const[name,j]of Object.entries(doc.joints)){const b=this.bones[name];if(b){b.position.fromArray(j.position);b.quaternion.fromArray(j.quaternion);}}
-    if(this.rest)for(const name of Object.keys(JOINT_LIMITS))this.limitJoint(name);
+    if(this.rest)for(const name of [...Object.keys(JOINT_LIMITS),...Object.keys(FINGER_PART_NAMES),'LeftForeArm','RightForeArm','LeftLeg','RightLeg','LeftToeBase','RightToeBase'])this.limitJoint(name);
     this.targets=structuredClone(doc.targets);this.poles=structuredClone(doc.poles);this.pins=structuredClone(doc.pins);this.hands={...doc.hands};
     this.model.updateMatrixWorld(true);this.suppress=false;if(update){this.update(true);this.syncGizmo();}
   }
@@ -381,13 +433,13 @@ export class PoseEngine {
 
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
-    return {ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,warning:this.warning,hands:{...this.hands},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount};
+    return {ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation:[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,warning:this.warning,hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount};
   }
 
   private update(fit:boolean){
     if(!this.ready)return;this.model.updateMatrixWorld(true);
     if(fit)this.fit(false);
-    for(const h of this.handles){const name=h.userData.part as string;h.position.copy(this.world(name));h.visible=this.moreControls||END_EFFECTORS.includes(name as Effector);const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.3:1);}
+    for(const h of this.handles){const name=h.userData.part as string;h.position.copy(this.world(name));h.visible=this.handDetail?!!fingerPart(name)&&name.startsWith(this.handDetail):!fingerPart(name)&&(this.moreControls||END_EFFECTORS.includes(name as Effector));const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.4:1);}
     if(this.display==='skeleton')this.updateSkeletonDisplay();
     this.onInfo(this.info());
   }

@@ -27,15 +27,24 @@ export type Preset = {
   poles?: Partial<Record<Effector, Vec3>>;
   handShape?: string; ground?: boolean;
 };
-export const PART_NAMES: Record<string, string> = {
+export const BODY_PART_NAMES: Record<string, string> = {
   Hips: '骨盆', Spine: '腰部', Spine1: '脊柱', Chest: '胸腔', UpperChest: '上胸', Neck: '颈部', Head: '头部',
   LeftShoulder: '左肩', LeftArm: '左上臂', LeftForeArm: '左肘', LeftHand: '左手',
   RightShoulder: '右肩', RightArm: '右上臂', RightForeArm: '右肘', RightHand: '右手',
-  LeftUpLeg: '左髋', LeftLeg: '左膝', LeftFoot: '左脚',
-  RightUpLeg: '右髋', RightLeg: '右膝', RightFoot: '右脚',
+  LeftUpLeg: '左髋', LeftLeg: '左膝', LeftFoot: '左脚', LeftToeBase:'左脚趾',
+  RightUpLeg: '右髋', RightLeg: '右膝', RightFoot: '右脚', RightToeBase:'右脚趾',
 };
+export const DIGITS=['Thumb','Index','Middle','Ring','Little'] as const;
+export type Digit=typeof DIGITS[number];
+export type Side='Left'|'Right';
+export const DIGIT_NAMES:Record<Digit,string>={Thumb:'拇指',Index:'食指',Middle:'中指',Ring:'无名指',Little:'小指'};
+export const FINGER_PART_NAMES:Record<string,string>=Object.fromEntries((['Left','Right'] as const).flatMap(side=>DIGITS.flatMap(digit=>[1,2,3].map(joint=>[`${side}${digit}${joint}`,`${side==='Left'?'左':'右'}手${DIGIT_NAMES[digit]} · 第 ${joint} 节`]))));
+export const PART_NAMES:Record<string,string>={...BODY_PART_NAMES,...FINGER_PART_NAMES};
+export type FingerValues={curl:[number,number,number];spread:number};
+export type HandValues=Record<Digit,FingerValues>;
 export type EngineInfo = {
   ready: boolean; view: string; navigating:boolean; selected: string; position: Vec3; rotation: Vec3;
   pinned: boolean; orientationPinned: boolean; ground: boolean; warning: string;
   hands: { Left: string; Right: string }; boneCount: number; vertexCount: number;
+  handDetail:Side|null; fingers:Record<Side,HandValues>; forearmTwist:Record<Side,number>; toes:Record<Side,number>;
 };
