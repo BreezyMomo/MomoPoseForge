@@ -29,11 +29,11 @@ export function MotionPanel({engine,info,onCapture,onBusy,onNotify}:{engine:Pose
     <div className="motion-meta"><span>{clip.duration.toFixed(3)} s</span><span>{t('pose.sampleFrames',clip.frames)}</span></div>
     <div className="motion-transport">
       <button disabled={busy||!motion?.active} title={t('pose.previousFrame')} aria-label={t('pose.previousFrame')} onClick={()=>engine?.seekMotion((motion?.frame??0)-1)}><SkipBack size={16}/></button>
-      <button className="motion-play" disabled={busy} aria-label={t(motion?.playing?'pose.pauseMotion':'pose.playMotion')} onClick={()=>{if(!motion?.active)engine?.previewMotion(clip.id);engine?.playMotion(!motion?.playing);}}>{motion?.playing?<Pause size={17}/>:<Play size={17}/>}<span>{t(motion?.playing?'pose.pauseMotion':'pose.playMotion')}</span></button>
+      <button className="motion-play" disabled={busy} aria-label={t(motion?.playing?'pose.pauseMotion':'pose.playMotion')} onClick={()=>{if(!motion?.active){engine?.previewMotion(clip.id);if(motion?.clip===clip.id)engine?.seekMotion(motion.frame);}engine?.playMotion(!motion?.playing);}}>{motion?.playing?<Pause size={17}/>:<Play size={17}/>}<span>{t(motion?.playing?'pose.pauseMotion':'pose.playMotion')}</span></button>
       <button disabled={busy||!motion?.active} title={t('pose.nextFrame')} aria-label={t('pose.nextFrame')} onClick={()=>engine?.seekMotion((motion?.frame??0)+1)}><SkipForward size={16}/></button>
     </div>
-    <input className="motion-seek" type="range" min={0} max={clip.frames-1} step={1} value={motion?.active?motion.frame:0} disabled={busy||!motion?.active} aria-label={t('pose.motionFrame')} onInput={e=>engine?.seekMotion(Number(e.currentTarget.value))}/>
-    <div className="motion-meta"><span>{motion?.active?motion.time.toFixed(3):'0.000'} s</span><span>{(motion?.active?motion.frame:0)+1} / {clip.frames}</span></div>
+    <input className="motion-seek" type="range" min={0} max={clip.frames-1} step={1} value={motion?.clip===clip.id?motion.frame:0} disabled={busy||!motion?.active} aria-label={t('pose.motionFrame')} onInput={e=>engine?.seekMotion(Number(e.currentTarget.value))}/>
+    <div className="motion-meta"><span>{motion?.clip===clip.id?motion.time.toFixed(3):'0.000'} s</span><span>{(motion?.clip===clip.id?motion.frame:0)+1} / {clip.frames}</span></div>
 
     <button className="character-action primary-button" disabled={busy||!motion?.active} onClick={()=>{engine?.captureMotion();onCapture();}}><Check size={15}/>{t('pose.captureMotion')}</button>
     <button className="character-action" disabled={busy||!motion?.active} onClick={()=>engine?.cancelMotion()}><Undo2 size={14}/>{t('pose.cancelMotion')}</button>

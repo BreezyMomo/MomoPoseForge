@@ -19,6 +19,10 @@ export class MotionPreview {
     for(const clip of clips)if(!this.clips.some(c=>c.uuid===clip.uuid))this.clips.push(clip);
     for(const clip of this.clips)if(!this.samples.has(clip.uuid))this.samples.set(clip.uuid,[...new Set(clip.tracks.flatMap(t=>Array.from(t.times)))].sort((a,b)=>a-b));
   }
+  importedClips(){return this.clips.filter(c=>importedMotion(c)).map(c=>Object.assign(c.clone(),{uuid:c.uuid}));}
+  rename(id:string,name:string){const clip=this.clips.find(c=>c.uuid===id);if(clip)clip.name=name;}
+  remove(id:string){const clip=this.clips.find(c=>c.uuid===id);if(!clip)return;if(this.selected===clip){this.stop();this.selected=undefined;this.time=0;}this.mixer.uncacheClip(clip);this.clips=this.clips.filter(c=>c!==clip);this.samples.delete(id);}
+  remember(id:string,time:number){if(this.active)throw new Error('请先结束动画预览');const clip=this.clips.find(c=>c.uuid===id);if(!clip)throw new Error('工程选择的动画不存在');this.selected=clip;this.time=Math.max(0,Math.min(clip.duration,time));}
   state():MotionState{
     const times=this.selected?this.samples.get(this.selected.uuid)??[]:[];
     const frame=times.reduce((best,t,i)=>Math.abs(t-this.time)<Math.abs(times[best]-this.time)?i:best,0);

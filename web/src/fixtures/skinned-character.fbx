@@ -1,0 +1,660 @@
+; FBX 7.4.0 project file - self-authored PoseForge skinned cloth fixture
+FBXHeaderExtension: {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects: {
+	Model: 1, "Model::Hips", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,98.01397122587102,1.9506977118514457
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 2, "Model::Spine", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0.00000867640651641948,9.566625304783539,0.12357872375673915
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 3, "Model::Spine1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.3672369763843344e-7,9.474416037755052,-0.9403546722240521
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 4, "Model::Chest", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",3.248674090766264e-7,8.550379173079904,-1.2904611087774134
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 5, "Model::UpperChest", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",3.0950407425686536e-7,8.145646995784283,-1.2293782337648294
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 6, "Model::Neck", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.8569606854479767e-7,7.519058765339359,-1.1348106773213806
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 7, "Model::Head", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-3.986715841540355e-7,9.036981890418927,1.5832345031962778
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 8, "Model::HeadTop_End", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-6.115137154552576e-7,16.739131558743804,2.4288544649232495
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 9, "Model::LeftEye", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.882279819025452,6.022379544084244,8.722827181541984
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 10, "Model::RightEye", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.8822701862479163,6.022379544085155,8.722820909036054
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 11, "Model::LeftShoulder", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",4.294390483884946,2.139212884941366,-1.2398773049088827
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 12, "Model::LeftArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",9.95259112636042,-0.49288299771830246,-2.0973000115405886
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 13, "Model::LeftForeArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",26.15989255861102,-0.00007232188174999266,0.00003525092197240176
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 14, "Model::LeftHand", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",26.617774765814055,-6.115303152753881e-7,0.00003416132658626281
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 15, "Model::LeftThumb1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.3171928625005944,-1.4799106840149623,2.5203950297611453
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 16, "Model::LeftThumb2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",3.0347317405953866,-1.7520439071138982,1.7520537827838059
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 17, "Model::LeftThumb3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.4923570813551454,-1.4389774373277708,1.4389707085288976
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 18, "Model::LeftThumb4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",1.8365181595394908,-1.0603185802162018,1.0603311073812176
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 19, "Model::LeftIndex1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",8.559110839823303,-0.48584388318460014,2.123564871701244
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 20, "Model::LeftIndex2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",3.4543588279327686,0.000013986185676273521,0.00002700095271084002
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 21, "Model::LeftIndex3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.708934178962419,0.00004268252040695586,-0.00004063253576241932
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 22, "Model::LeftIndex4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.2482096303320875,0.000042594403559803595,0.000031419081903544255
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 23, "Model::LeftMiddle1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",8.957590620198507,-0.000014974843853821085,0.000012803343368839037
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 24, "Model::LeftMiddle2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",3.474860962818138,-4.255058971835979e-7,0.000016632210128597613
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 25, "Model::LeftMiddle3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.772691517308734,-0.00004359118870311818,0.000016253462491871984
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 26, "Model::LeftMiddle4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.662732689684022,-0.00004362269785396222,-0.000008841851251162325
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 27, "Model::LeftRing1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",8.554623309600151,-0.04127727772449408,-1.7524335463516936
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 28, "Model::LeftRing2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.963526249051196,0.000013707607027235724,0.0000089542313994051
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 29, "Model::LeftRing3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.760246864804883,-0.00002947385968621319,-0.000007136259497220188
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 30, "Model::LeftRing4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",2.487546965093579,-0.0000439262392015749,-5.786508980309968e-7
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 31, "Model::LeftLittle1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",7.58989033456402,-0.4591336645953126,-3.57618106290733
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 32, "Model::LeftLittle2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",3.382594187255339,-0.000002219788974855419,-0.000026007317088794224
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 33, "Model::LeftLittle3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",1.9865206673983615,0.00003959025236532909,-0.00000338199397931227
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 34, "Model::LeftLittle4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",1.8563607851908026,0.000024990594327256588,-0.0000416912017422999
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 35, "Model::RightShoulder", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-4.29394396280097,2.139399267978792,-1.2399046350852512
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 36, "Model::RightArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-9.95303557823556,-0.4930980550649,-2.0972807460147553
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 37, "Model::RightForeArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-26.15989255861102,-0.000014973257456141198,0.00001060880821315835
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 38, "Model::RightHand", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-26.617774765814055,0.000013725622105553725,0.00005253080695086232
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 39, "Model::RightLittle1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-7.58885089066248,-0.4589329443305923,-3.576128418640819
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 40, "Model::RightLittle2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-3.3826013558339807,0.000040791497513126274,0.000046571326163535876
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 41, "Model::RightLittle3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-1.9865206673983615,0.000025253148416837234,0.000013643352557435318
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 42, "Model::RightLittle4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-1.8563607851908026,-0.0000036836576899901274,-0.0000013680036478613822
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 43, "Model::RightRing1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-8.553741574428509,-0.041248603372445736,-1.7524236895531933
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 44, "Model::RightRing2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.963526249051196,0.00004238176858351039,0.00004569004128929244
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 45, "Model::RightRing3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.760239696226252,-0.00004381100826567064,-0.0000380507140296249
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 46, "Model::RightRing4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.487546965093579,0.000027759536358473724,-0.000002818958506900504
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 47, "Model::RightMiddle1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-8.956751896498648,-6.37799346669965e-7,0.000014144302375174167
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 48, "Model::RightMiddle2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-3.474860962818138,0.000013911650476039483,-0.000020554782607234978
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 49, "Model::RightMiddle3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.7726843487301034,-5.797248903149921e-7,1.2416081079935637e-7
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 50, "Model::RightMiddle4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.662732689684022,0.000013725915470885752,0.00005074688669490235
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 51, "Model::RightIndex1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-8.558150250286722,-0.4855571401118919,2.1236040748962894
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 52, "Model::RightIndex2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-3.4543588279327686,0.000028323285272691123,0.00002990999888978496
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 53, "Model::RightIndex3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.7089341789624077,-0.000029003259482962562,0.000038221861873091734
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 54, "Model::RightIndex4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.2482096303320875,0.000042594421589825515,0.00002626671246584722
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 55, "Model::RightThumb1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.315938361240122,-1.4777027620174854,2.52059395811293
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 56, "Model::RightThumb2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-3.034703066280864,-1.75207258147283,1.7520886175483412
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 57, "Model::RightThumb3", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-2.492392924248299,-1.4389344759803357,1.438946352449325
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 58, "Model::RightThumb4", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-1.8365324966967633,-1.0602899546648725,1.0603447237256955
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 59, "Model::LeftUpLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",7.712031265500206,-6.343904759027752,-1.5029432559574467
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 60, "Model::LeftLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-8.960723302253726e-7,-41.690497435229375,0.2674446324247592
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 61, "Model::LeftFoot", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",8.960723302253726e-7,-41.7444262126584,-2.8020725449824724
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 62, "Model::LeftToeBase", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-0.00000268821698790056,-8.201455262771168,10.06364139780413
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 63, "Model::LeftToe_End", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-0.0000026882169865127814,-0.0006392392201038115,8.71773662806726
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 64, "Model::RightUpLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-7.7120447065851385,-6.343854578979801,-1.502947064257661
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 65, "Model::RightLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-8.960723288375938e-7,-41.69054761548164,0.2688672031596963
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 66, "Model::RightFoot", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,-41.74428642517009,-2.803574810132788
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 67, "Model::RightToeBase", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-0.0000017921446576751876,-8.20145884706054,10.06364229387578
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 68, "Model::RightToe_End", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-0.0000017921446590629664,-0.0006383431459163586,8.717722290910979
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Geometry: 500, "Geometry::Cloth", "Mesh" {
+		Vertices: *9 {
+			a: -10,98.01397122587102,0,10,98.01397122587102,0,0,123.01397122587102,0
+		}
+		PolygonVertexIndex: *3 {
+			a: 0,1,-3
+		}
+	}
+	Model: 501, "Model::Cloth", "Mesh" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Deformer: 600, "Deformer::Skin", "Skin" {
+		Version: 101
+	}
+	Deformer: 601, "SubDeformer::Hips", "Cluster" {
+		Version: 100
+		Indexes: *3 {
+			a: 0,1,2
+		}
+		Weights: *3 {
+			a: 1,1,1
+		}
+		Transform: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1
+		}
+		TransformLink: *16 {
+			a: 1,0,0,0,0,1,0,0,0,0,1,0,0,98.01397122587102,1.9506977118514457,1
+		}
+	}
+}
+Connections: {
+	C: "OO",1,0
+	C: "OO",2,1
+	C: "OO",3,2
+	C: "OO",4,3
+	C: "OO",5,4
+	C: "OO",6,5
+	C: "OO",7,6
+	C: "OO",8,7
+	C: "OO",9,7
+	C: "OO",10,7
+	C: "OO",11,5
+	C: "OO",12,11
+	C: "OO",13,12
+	C: "OO",14,13
+	C: "OO",15,14
+	C: "OO",16,15
+	C: "OO",17,16
+	C: "OO",18,17
+	C: "OO",19,14
+	C: "OO",20,19
+	C: "OO",21,20
+	C: "OO",22,21
+	C: "OO",23,14
+	C: "OO",24,23
+	C: "OO",25,24
+	C: "OO",26,25
+	C: "OO",27,14
+	C: "OO",28,27
+	C: "OO",29,28
+	C: "OO",30,29
+	C: "OO",31,14
+	C: "OO",32,31
+	C: "OO",33,32
+	C: "OO",34,33
+	C: "OO",35,5
+	C: "OO",36,35
+	C: "OO",37,36
+	C: "OO",38,37
+	C: "OO",39,38
+	C: "OO",40,39
+	C: "OO",41,40
+	C: "OO",42,41
+	C: "OO",43,38
+	C: "OO",44,43
+	C: "OO",45,44
+	C: "OO",46,45
+	C: "OO",47,38
+	C: "OO",48,47
+	C: "OO",49,48
+	C: "OO",50,49
+	C: "OO",51,38
+	C: "OO",52,51
+	C: "OO",53,52
+	C: "OO",54,53
+	C: "OO",55,38
+	C: "OO",56,55
+	C: "OO",57,56
+	C: "OO",58,57
+	C: "OO",59,1
+	C: "OO",60,59
+	C: "OO",61,60
+	C: "OO",62,61
+	C: "OO",63,62
+	C: "OO",64,1
+	C: "OO",65,64
+	C: "OO",66,65
+	C: "OO",67,66
+	C: "OO",68,67
+	C: "OO",500,501
+	C: "OO",501,0
+	C: "OO",600,500
+	C: "OO",601,600
+	C: "OO",1,601
+}

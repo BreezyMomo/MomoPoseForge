@@ -3,7 +3,7 @@ import type {RigDefinition} from './rigs';
 import type {PoseDocument} from './types';
 import {disposeObject,ensureRigNormals} from './rigGeometry';
 
-export type AppearanceRef={id:string;name:string;rig:string;rigVersion:number};
+export type AppearanceRef={id:string;name:string;rig:string;rigVersion:number;format?:'glb'|'fbx'};
 export const MAX_CHARACTER_BYTES=32*1024*1024;
 export function validateCharacterGlb(bytes:ArrayBuffer){
   if(bytes.byteLength<20||bytes.byteLength>MAX_CHARACTER_BYTES)throw new Error('请导入 32 MB 以内的完整 GLB 角色文件');
@@ -14,11 +14,11 @@ export function validateCharacterGlb(bytes:ArrayBuffer){
 }
 export function validAppearance(value:unknown,rig:RigDefinition):value is AppearanceRef{
   if(!value||typeof value!=='object')return false;const r=value as AppearanceRef;
-  return typeof r.id==='string'&&/^[a-f0-9]{64}$/.test(r.id)&&typeof r.name==='string'&&r.name.length>0&&r.name.length<=80&&r.rig===rig.id&&r.rigVersion===rig.version;
+  return typeof r.id==='string'&&/^[a-f0-9]{64}$/.test(r.id)&&typeof r.name==='string'&&r.name.length>0&&r.name.length<=80&&(r.format===undefined||r.format==='glb'||r.format==='fbx')&&r.rig===rig.id&&r.rigVersion===rig.version;
 }
 export function appearanceBoneName(name:string,rig:RigDefinition){
   if(rig.strategy!=='xbot-humanoid')return name;
-  const clean=name.replace(/^mixamorig[:_]?/i,'');
+  const clean=name.replace(/^mixamorig\d*[:_]?/i,'');
   if(clean==='Spine2')return 'Chest';
   return clean.replace(/^(Left|Right)Hand(Thumb|Index|Middle|Ring|Pinky)([1-4])$/,(_,side,digit,n)=>`${side}${digit==='Pinky'?'Little':digit}${n}`);
 }
@@ -27,7 +27,11 @@ export function buildAppearance(source:Object3D,rig:RigDefinition,rest:PoseDocum
   source.updateMatrixWorld(true);
   const sourceBones=new Map<string,Bone>(),meshes:SkinnedMesh[]=[];
   source.traverse(o=>{
-    if(o instanceof Bone){const name=appearanceBoneName(o.name,rig);if(sourceBones.has(name))throw new Error(`外观骨骼重名：${name}`);sourceBones.set(name,o);}
+    if(o instanceof Bone){const name=appearanceBoneName(o.name,rig),existing=sourceBones.get(name);if(existing){
+      const id=(o as Bone&{ID?:number}).ID;let ancestor=o.parent;
+      while(ancestor&&ancestor!==existing&&(ancestor as Object3D&{ID?:number}).ID===id&&appearanceBoneName(ancestor.name,rig)===name&&!ancestor.userData.transformData)ancestor=ancestor.parent;
+      if(typeof id!=='number'||id!==(existing as Bone&{ID?:number}).ID||ancestor!==existing||o.userData.transformData)throw new Error(`外观骨骼重名：${name}`);
+    }else sourceBones.set(name,o);}
     if(o instanceof SkinnedMesh)meshes.push(o);
     else if(o instanceof Mesh)throw new Error('请将服装与配件蒙皮后再导入；当前只接受蒙皮网格');
   });

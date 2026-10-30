@@ -3,8 +3,9 @@ import type {RigDefinition} from './rigs';
 import type {PoseDocument} from './types';
 import {importedMotion,MOTION_ADAPTER_VERSION,MAX_MOTION_SECONDS} from './mixamoMotion';
 import {checkMotionAbort} from './motionImport';
+import {assetRequest,assetTransaction,assetsChanged} from './assetDatabase';
 
-export type MotionAsset={key:string;rig:string;rigVersion:number;adapterVersion:number;clips:ReturnType<AnimationClip['toJSON']>[]};
+export type MotionAsset={key:string;rig:string;rigVersion:number;adapterVersion:number;clips:ReturnType<AnimationClip['toJSON']>[];deletedClips?:Record<string,number>};
 export function packMotionAsset(clips:AnimationClip[]):MotionAsset{
   const info=clips[0]&&importedMotion(clips[0]);if(!info)throw new Error('动画缺少骨架适配信息');
   return {key:`${info.rig}@${info.rigVersion}:${info.assetId}:v${info.adapterVersion}`,rig:info.rig,rigVersion:info.rigVersion,adapterVersion:info.adapterVersion,clips:clips.map(c=>c.toJSON())};
@@ -27,21 +28,16 @@ export function unpackMotionAsset(asset:MotionAsset,rig:RigDefinition,rest:PoseD
     if(!names.has(`${rig.root}.position`))throw new Error('本地动画缺少根骨轨道');
     sampleBudget+=Math.max(...json.tracks.map(t=>t.times.length));if(sampleBudget>12_000)throw new Error('本地动画采样总量过大');
     const clip=AnimationClip.parse(json),info=importedMotion(clip);
-    if(!info||typeof info.fileName!=='string'||info.fileName.length>120||!['fbx','glb'].includes(info.format)||info.sampleRate!==30||!['skin-bind','node-rest'].includes(info.reference)||!Number.isInteger(info.mappedBones)||info.mappedBones<1||info.mappedBones>Object.keys(rest.joints).length||!Number.isInteger(info.ignoredTranslations)||info.ignoredTranslations<0||info.rig!==rig.id||info.rigVersion!==rig.version||info.adapterVersion!==MOTION_ADAPTER_VERSION||info.root!==rig.root||!Array.isArray(info.rootOrigin)||info.rootOrigin.length!==3||info.rootOrigin.some((v,i)=>v!==rest.joints[rig.root].position[i])||!/^([a-f0-9]{64})$/.test(info.assetId)||asset.key!==`${rig.id}@${rig.version}:${info.assetId}:v${MOTION_ADAPTER_VERSION}`)throw new Error('本地动画适配信息无效');
+    if(!info||typeof info.fileName!=='string'||info.fileName.length>120||!['fbx','glb'].includes(info.format)||info.sampleRate!==30||!['skin-bind','node-rest'].includes(info.reference)||!Number.isInteger(info.mappedBones)||info.mappedBones<1||info.mappedBones>Object.keys(rest.joints).length||!Number.isInteger(info.ignoredTranslations)||info.ignoredTranslations<0||info.rig!==rig.id||info.rigVersion!==rig.version||info.adapterVersion!==MOTION_ADAPTER_VERSION||info.root!==rig.root||!Array.isArray(info.rootOrigin)||info.rootOrigin.length!==3||info.rootOrigin.some((v,i)=>v!==rest.joints[rig.root].position[i])||!/^([a-f0-9]{64})$/.test(info.assetId)||asset.key!==`${rig.id}@${rig.version}:${info.assetId}:v${MOTION_ADAPTER_VERSION}`||!Array.from({length:24},(_,i)=>`${rig.id}@${rig.version}:${info.assetId}:${i}:v${MOTION_ADAPTER_VERSION}`).includes(clip.uuid))throw new Error('本地动画适配信息无效');
     return clip;
   });
 }
-const database=()=>new Promise<IDBDatabase>((resolve,reject)=>{const req=indexedDB.open('momo-pose-forge:motions',1);req.onupgradeneeded=()=>req.result.createObjectStore('motions',{keyPath:'key'});req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(new Error('浏览器无法打开本地动画库'));});
-async function operation<T>(mode:IDBTransactionMode,run:(store:IDBObjectStore)=>IDBRequest<T>,signal?:AbortSignal):Promise<T>{
-  checkMotionAbort(signal);const db=await database();
-  try{checkMotionAbort(signal);return await new Promise<T>((resolve,reject)=>{
-    const tx=db.transaction('motions',mode),req=run(tx.objectStore('motions'));let result:T;
-    const cancel=()=>tx.abort(),cleanup=()=>signal?.removeEventListener('abort',cancel);signal?.addEventListener('abort',cancel,{once:true});
-    req.onsuccess=()=>{result=req.result;};tx.oncomplete=()=>{cleanup();resolve(result);};
-    tx.onerror=tx.onabort=()=>{cleanup();reject(signal?.aborted?new DOMException('动画导入已取消','AbortError'):new Error('本地动画保存失败，请检查可用空间'));};
-  });}finally{db.close();}
-}
 export const motionLibrary={
-  async list(rig:RigDefinition){return (await operation('readonly',s=>s.getAll()) as MotionAsset[]).filter(a=>a.rig===rig.id&&a.rigVersion===rig.version);},
-  async put(asset:MotionAsset,signal?:AbortSignal){await operation('readwrite',s=>s.put(asset),signal);},
+  async all(){return await assetRequest('motions','readonly',s=>s.getAll()) as MotionAsset[];},
+  async list(rig:RigDefinition){return (await this.all()).filter(a=>a.rig===rig.id&&a.rigVersion===rig.version).map(a=>({...a,clips:a.clips.filter(c=>!a.deletedClips?.[c.uuid])})).filter(a=>a.clips.length);},
+  async put(asset:MotionAsset,signal?:AbortSignal){checkMotionAbort(signal);await assetTransaction<void>(['motions'],'readwrite',tx=>{const s=tx.objectStore('motions'),q=s.get(asset.key);q.onsuccess=()=>{const old=q.result as MotionAsset|undefined;s.put({...asset,clips:asset.clips.map(c=>({...c,name:old?.clips.find(o=>o.uuid===c.uuid)?.name??c.name}))});};},signal);assetsChanged();},
+  async edit(key:string,id:string,change:{name?:string;deleted?:boolean}){
+    if(change.name!==undefined&&(!change.name.trim()||change.name.trim().length>80))throw new Error('名称须为 1–80 个字符');
+    await assetTransaction<void>(['motions'],'readwrite',tx=>{const s=tx.objectStore('motions'),q=s.get(key);q.onsuccess=()=>{const a=q.result as MotionAsset|undefined,c=a?.clips.find(c=>c.uuid===id);if(!a||!c)return;if(change.name!==undefined)c.name=change.name.trim();if(change.deleted!==undefined){a.deletedClips={...a.deletedClips};if(change.deleted)a.deletedClips[id]=Date.now();else delete a.deletedClips[id];}s.put(a);};});assetsChanged();
+  },
 };

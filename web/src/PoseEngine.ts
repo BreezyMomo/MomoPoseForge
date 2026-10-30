@@ -22,7 +22,8 @@ import {validateReferenceImage,referenceWithSettings,type ReferenceImage,type Re
 import {HAND_GESTURES,validHandValues,normalizedHandValues,writeHandValues,handShapeValid} from './handGestures';
 import {defaultSymmetry,symmetricLimb,limbParts,mirroredRotation,type SymmetryGroup} from './symmetry';
 import {MotionPreview} from './motionPreview';
-import {buildAppearance,validAppearance,validateCharacterGlb,type AppearanceRef} from './characterAppearance';
+import {buildAppearance,validAppearance,type AppearanceRef} from './characterAppearance';
+import {parseCharacter} from './characterImport';
 import {characterLibrary} from './characterLibrary';
 import {parseMotionSource,checkMotionAbort,MAX_MOTION_BYTES} from './motionImport';
 import {retargetMixamoMotion} from './mixamoMotion';
@@ -803,20 +804,22 @@ export class PoseEngine {
     if(!bytes){
       const builtin=this.activeRig.appearances?.find(a=>a.id===ref.id);
       if(builtin){const response=await fetch(builtin.url);if(!response.ok)throw new Error('内置角色外观加载失败');bytes=await response.arrayBuffer();}
-      else{const saved=await characterLibrary.get(ref);if(!saved)throw new Error(`本机缺少角色外观“${ref.name}”，请先导入对应 GLB；当前姿势未改变`);bytes=saved.bytes;}
+      else{const saved=await characterLibrary.get(ref);if(!saved)throw new Error(`本机缺少角色外观“${ref.name}”，请先导入对应文件或完整工程包`);bytes=saved.bytes;}
     }
     if(this.disposed)return;
-    validateCharacterGlb(bytes);
     const digest=await crypto.subtle.digest('SHA-256',bytes),hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
     if(hash!==ref.id)throw new Error('角色文件与工程外观引用不一致');
-    const gltf=await new GLTFLoader().parseAsync(bytes,'');
+    const source=await parseCharacter(bytes,ref.format??'glb');
     try{
       if(this.disposed)return;
-      const group=buildAppearance(gltf.scene,this.activeRig,this.rest,this.bones);group.visible=false;
+      const group=buildAppearance(source.scene,this.activeRig,this.rest,this.bones);group.visible=false;
       if(this.appearanceGroups.has(ref.id)){disposeObject(group);return;}
       this.model.add(group);this.appearanceGroups.set(ref.id,group);
-    }finally{disposeObject(gltf.scene);}
+    }finally{source.dispose();}
   }
+  renameAppearance(id:string,name:string){if(this.appearance?.id===id){this.appearance={...this.appearance,name};if(this.motionBefore)this.motionBefore.appearance={...this.appearance};this.onInfo(this.info());this.onCommit(this.snapshot(),false);}}
+  renameMotion(id:string,name:string){this.motion?.rename(id,name);this.onInfo(this.info());}
+  removeMotion(id:string){if(this.motion?.state().clip===id)this.cancelMotion();this.motion?.remove(id);this.onInfo(this.info());}
   setAppearance(ref?:AppearanceRef,commit=true){
     if(ref&&(!validAppearance(ref,this.activeRig)||!this.appearanceGroups?.has(ref.id)))throw new Error('请先载入兼容的角色外观');
     for(const mesh of this.originalMeshes??[])mesh.visible=!ref;
