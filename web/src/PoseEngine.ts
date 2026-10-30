@@ -37,7 +37,7 @@ const CHAINS = XBOT_RIG.chains;
 const asVec = (v: THREE.Vector3): Vec3 => v.toArray() as Vec3;
 type ActorRuntime=ReturnType<PoseEngine['captureActorRuntime']>;
 type ActorSlot={id:string;name:string;visible:boolean;locked:boolean;state:ActorRuntime;drafts:Map<string,PoseDocument>};
-export type SceneLoadOptions={appearanceBytes?:(ref:AppearanceRef)=>ArrayBuffer|undefined;prepareActor?:(controller:PoseEngine,id:string)=>Promise<void>;beforeCommit?:(signal:AbortSignal)=>Promise<void>};
+export type SceneLoadOptions={appearanceBytes?:(ref:AppearanceRef)=>ArrayBuffer|undefined;recoverAppearance?:(id:string,ref:AppearanceRef,error:Error)=>boolean;prepareActor?:(controller:PoseEngine,id:string)=>Promise<void>;beforeCommit?:(signal:AbortSignal)=>Promise<void>};
 
 export class PoseEngine {
   // Prototype is also used by the headless X Bot regression fixtures.
@@ -351,7 +351,7 @@ export class PoseEngine {
       for(const actor of doc.actors){check();const rig=requireRig(actor.pose.rig),old=previousSlots.get(actor.id),reuse=!options.prepareActor&&old?.state.rigDefinition.id===rig.id&&old.state.rigDefinition.version===rig.version;
         const state=reuse?old!.state:prefetched?.get(actor.id)??await this.loadActorRuntime(rig);if(!reuse&&!created.includes(state))created.push(state);check();
         const local=this.controller(state),abort=()=>{local.disposed=true;};controller.signal.addEventListener('abort',abort,{once:true});
-        try{actor.pose=actorPose(parseDocument(JSON.stringify(poseWithScene(actor.pose,doc)),state.rest,rig));if(actor.pose.appearance)await local.prepareAppearance(actor.pose.appearance,options.appearanceBytes?.(actor.pose.appearance));await options.prepareActor?.(local,actor.id);check();}
+        try{actor.pose=actorPose(parseDocument(JSON.stringify(poseWithScene(actor.pose,doc)),state.rest,rig));if(actor.pose.appearance){const ref=actor.pose.appearance;try{await local.prepareAppearance(ref,options.appearanceBytes?.(ref));}catch(error){if(!options.recoverAppearance?.(actor.id,ref,error as Error))throw error;actor.pose.appearance=undefined;}}await options.prepareActor?.(local,actor.id);check();}
         finally{controller.signal.removeEventListener('abort',abort);}
         next.set(actor.id,{id:actor.id,name:actor.name,visible:actor.visible,locked:actor.locked,state:local.captureActorRuntime(),drafts:new Map(old?.drafts??[])});
       }

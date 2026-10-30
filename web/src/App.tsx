@@ -4,7 +4,7 @@ import {WorkbenchPreferences} from './WorkbenchPreferences';
 import type {DockWorkspace} from '@momo/workbench/dock';
 import { useCallback, useEffect, useRef, useState, type ElementType } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpRight, Bone, Box, Camera, Check, ChevronDown, ChevronRight, CircleHelp, Copy, Download, Expand, FolderOpen, Grid2X2, Hand, ImagePlus, Layers2, LoaderCircle, LockKeyhole, Maximize, MousePointer2, Move3D, Plus, Rotate3D, RotateCcw, Search, Settings2, Undo2, Redo2, UnlockKeyhole, X } from 'lucide-react';
-import { PoseEngine } from './PoseEngine';
+import { PoseEngine,type SceneLoadOptions } from './PoseEngine';
 import {PRESET_SCOPES,type PresetScope} from './presetScopes';
 import { DEFAULT_VIEWS, FINGER_PART_NAMES, type Side, type EngineInfo, type PoseDocument } from './types';
 import { exportPose, parseDocument, documentRig, type ExportOptions } from './files';
@@ -120,15 +120,16 @@ export default function App(){
       await engine.load();if(!alive)return;
       await engine.restoreMotionLibrary().catch(()=>notify(t('pose.motionLibraryUnavailable')));
       let restored=false;
+      const recovery:SceneLoadOptions={recoverAppearance:(_id,ref)=>{notify(t('pose.appearanceDraftFallback',ref.name));return true;}};
       let sceneText:string|null=null;try{sceneText=localStorage.getItem(SCENE_DRAFT_KEY);}catch{notify(t('pose.rigSaveFailed'));}
-      if(sceneText){try{await engine.restoreScene(readSceneDocument(sceneText),{},false);restored=true;}catch(e){notify((e as Error).message);}}
-      else{try{const legacy=readRigStorage(localStorage,'draft',engine.activeRig);if(legacy){await engine.restoreScene(readSceneDocument(legacy),{},false);restored=true;}}catch(e){notify((e as Error).message);}}
+      if(sceneText){try{await engine.restoreScene(readSceneDocument(sceneText),recovery,false);restored=true;}catch(e){if(alive)setError(t('pose.sceneDraftFailed',(e as Error).message));return;}}
+      else{let legacy:string|null=null;try{legacy=readRigStorage(localStorage,'draft',engine.activeRig);}catch(e){notify((e as Error).message);}if(legacy){try{await engine.restoreScene(readSceneDocument(legacy),recovery,false);restored=true;}catch(e){if(alive)setError(t('pose.sceneDraftFailed',(e as Error).message));return;}}}
       if(!alive)return;
       const settings=runtimeOptions.current;engine.setDisplay(settings.display);engine.setGrid(settings.grid);engine.setMore(settings.more);engine.setSpace(settings.space);
       if(!restored){engine.applyPreset(engine.activeRig.presets[0],false);engine.name='未命名姿势';engine.focus();}
       initialized=true;initializedRef.current=true;engine.setInteractionBlocked(false);undoStack.current=[];redoStack.current=[];accept(engine.snapshot(),false);setInfo(engine.info());setActiveRig(engine.activeRig);if(restored)notify(t('pose.restoredDraft'));
     }catch(e){if(alive)setError((e as Error).message);}})();
-    return()=>{alive=false;referenceRequest.current++;if(engine.ready&&!engine.disposed){try{localStorage.setItem(SCENE_DRAFT_KEY,JSON.stringify(engine.sceneSnapshot()));}catch{}}engine.dispose();host.remove();if(engineRef.current===engine)engineRef.current=null;};
+    return()=>{alive=false;referenceRequest.current++;if(initialized&&engine.ready&&!engine.disposed){try{localStorage.setItem(SCENE_DRAFT_KEY,JSON.stringify(engine.sceneSnapshot()));}catch{}}engine.dispose();host.remove();if(engineRef.current===engine)engineRef.current=null;};
   },[accept,notify]);
 
   useEffect(()=>{
