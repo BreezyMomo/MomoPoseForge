@@ -108,7 +108,7 @@ describe('非零静止旋转的 FK 编辑',()=>{
   });
   it('只输出真实通用骨架，选择器替换测试人形且旧工程入口继续可用',()=>{
     const e=fixture(),data=e.genericSkeletonData();expect(data.joints).toHaveLength(24);expect(data.joints.find(j=>j.name==='b_Tail03_014')?.parent).toBe('b_Tail02_013');expect(()=>e.openPose({} as never,512,512)).toThrow('OpenPose');
-    expect(documentRig(JSON.stringify(e.snapshot()))).toBe(FOX_RIG);expect(RIGS.map(r=>r.id)).toEqual([XBOT_RIG.id,FOX_RIG.id]);expect(rigOptions(BASIC_HUMAN_RIG)).toContain(BASIC_HUMAN_RIG);
+    expect(documentRig(JSON.stringify(e.snapshot()))).toBe(FOX_RIG);expect(RIGS.filter(r=>r===XBOT_RIG||r===FOX_RIG).map(r=>r.id)).toEqual([XBOT_RIG.id,FOX_RIG.id]);expect(rigOptions(BASIC_HUMAN_RIG)).toContain(BASIC_HUMAN_RIG);
   });
   it('旧 X Bot 资产格式 version=2 不被当作骨架修订版本拒绝',async()=>{
     const gltf=await loader.parseAsync(Uint8Array.from(bytes('../public/models/xbot.glb')).buffer,'');const e=fixture();

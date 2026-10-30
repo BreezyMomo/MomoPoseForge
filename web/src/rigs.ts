@@ -2,6 +2,7 @@ import type {Vec3, Preset} from './types';
 import {PART_NAMES, END_EFFECTORS} from './types';
 import {PRESETS} from './presets';
 import {FOX_RIG} from './foxRig';
+import {BODYCHAN_RIG,BODYKUN_RIG} from './bodyFigureRigs';
 
 export type RigJointControl={name:string;label:string;labelEn:string;limits?:[Vec3,Vec3];hinge?:0|1|2};
 export type RigJoint=RigJointControl&{parent:string|null;position:Vec3};
@@ -44,6 +45,15 @@ export const XBOT_RIG:RigDefinition={
   capabilities:{hands:true,fullBodyIK:true,pins:true,floor:true,mirror:true,openPose:true,partialPresets:true},presets:PRESETS,
 };
 
+// Same validated canonical humanoid strategy, with Y Bot's own rest proportions.
+// X Bot's measured sole envelope must never be applied to a different surface.
+export const YBOT_RIG:RigDefinition={
+  ...XBOT_RIG,id:'mixamo-ybot-v1',name:'Mixamo Y Bot',nameEn:'Mixamo Y Bot',
+  asset:{kind:'gltf',url:'/models/ybot.glb',profileUrl:'/models/ybot-profile.json'},
+  sourceUrl:'/models/YBOT-ASSET.md',soles:undefined,
+  attribution:{authors:'Adobe Mixamo (character); MULUALEM-TEKLE (source glTF conversion)',source:'https://github.com/MULUALEM-TEKLE/IK-test/tree/404fe4a8791d1f8847cc92ef913685014dc52047/public',licenseUrl:'https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html',changes:'Original Y Bot surface, joint materials and skin weights retained. Normalized to 1.8 m and a canonical identity-rest humanoid skeleton, with an added UpperChest control layer. No source animations included. Head OpenPose anchors are geometric estimates; X Bot sole-contact calibration is not reused.'},
+};
+
 const joint=(name:string,parent:string|null,position:Vec3,label:string,labelEn:string,limits?:[Vec3,Vec3]):RigJoint=>({name,parent,position,label,labelEn,limits});
 const basicJoints:RigJoint[]=[
   joint('pelvis',null,[0,.96,0],'骨盆','Pelvis'),
@@ -68,7 +78,7 @@ export const BASIC_HUMAN_RIG:RigDefinition={
   capabilities:{hands:false,fullBodyIK:false,pins:false,floor:false,mirror:false,openPose:false,partialPresets:false},
   presets:[{id:'neutral',name:'中立姿态',category:'基础',description:'恢复基础人形的 T 形静止姿态'}],
 };
-export const RIGS:readonly RigDefinition[]=[XBOT_RIG,FOX_RIG];
+export const RIGS:readonly RigDefinition[]=[XBOT_RIG,YBOT_RIG,FOX_RIG,BODYCHAN_RIG,BODYKUN_RIG];
 // Old basic-human projects remain readable without keeping the test asset in the picker.
 export const REGISTERED_RIGS:readonly RigDefinition[]=[...RIGS,BASIC_HUMAN_RIG];
 export function findRig(id:string){return REGISTERED_RIGS.find(r=>r.id===id);}

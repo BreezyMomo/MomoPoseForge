@@ -1,0 +1,10 @@
+{
+  "id": "momo-bodykun-fk",
+  "version": 1,
+  "rigVersion": 1,
+  "units": "metres",
+  "sourceSha256": "d01efc62cf39aee85b6cefb4f12ae229297cebd5fab27da03e6ce5f4bc1683af",
+  "heightMetres": 1.78,
+  "sourceVertices": 17230,
+  "conversion": "Rigify deformation weights collapsed to 53 anatomical FK joints; original proportions retained; plain clay material; no scripts, constraints or animations."
+}

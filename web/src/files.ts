@@ -144,7 +144,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       '参考图片为视口叠加层，不进入任何 PNG、深度、法线或关键点；如勾选工程，图片内嵌在 project.pose.json 中，可随工程恢复。',
       'project.pose.json 可重新打开编辑；contact-sheet.png 只用于整组查看，单视角工作流使用该视角目录内的独立图。',
       '场景道具为程序生成的椅子、桌子、方块或握杆；可见道具进入素体、深度、法线和 mask，骨架/关节点只含人体。道具位置、尺寸、朝向及显隐保存在工程中。',
-      '角色资产：Adobe Mixamo X Bot，https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html 。','',
+      '角色资产：Adobe Mixamo；具体角色与转换来源见 manifest.json。使用参考：https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html 。','',
     ].join('\n'):[
       'MomoPoseForge 通用骨架导出',`骨架：${rig.name} / ${rig.id} v${rig.version}`,
       'skeleton.png 和 joints.json 是此骨架的连接图与投影关节数据，不是人体 OpenPose。',

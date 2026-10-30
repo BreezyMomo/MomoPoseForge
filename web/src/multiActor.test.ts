@@ -5,23 +5,25 @@ import {AnimationClip,Bone,Group,Mesh,Object3D,OrthographicCamera,Quaternion,Qua
 import {GLTFLoader,type GLTF} from 'three/addons/loaders/GLTFLoader.js';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {PoseEngine} from './PoseEngine';
-import {XBOT_RIG,BASIC_HUMAN_RIG,type RigDefinition} from './rigs';
+import {XBOT_RIG,YBOT_RIG,BASIC_HUMAN_RIG,type RigDefinition} from './rigs';
 import {FOX_RIG} from './foxRig';
+import {BODYCHAN_RIG,BODYKUN_RIG} from './bodyFigureRigs';
 import {DEFAULT_VIEWS,type PoseDocument} from './types';
 import {MotionPreview} from './motionPreview';
 import {readSceneDocument,sceneFromPose,relocatePose,MAX_ACTORS} from './sceneDocument';
 import {defaultCameraSettings} from './cameraState';
 import {parseDocument} from './files';
+import {HAND_GESTURES} from './handGestures';
 import {buildProceduralRig,disposeObject} from './rigGeometry';
 
 const bytes=(path:string)=>Uint8Array.from(readFileSync(new URL(path,import.meta.url))).buffer;
-let human:GLTF,fox:GLTF;
-beforeAll(async()=>{const loader=new GLTFLoader();loader.register(()=>({name:'TEST_TEXTURE',loadTexture:async()=>new Texture()}));[human,fox]=await Promise.all([loader.parseAsync(bytes('../public/models/xbot.glb'),''),loader.parseAsync(bytes('../public/models/fox/fox.glb'),'')]);});
+let human:GLTF,fox:GLTF,bodychan:GLTF,bodykun:GLTF,ybot:GLTF;
+beforeAll(async()=>{const loader=new GLTFLoader();loader.register(()=>({name:'TEST_TEXTURE',loadTexture:async()=>new Texture()}));[human,fox,bodychan,bodykun,ybot]=await Promise.all(['../public/models/xbot.glb','../public/models/fox/fox.glb','../public/models/body-figures/bodychan.glb','../public/models/body-figures/bodykun.glb','../public/models/ybot.glb'].map(path=>loader.parseAsync(bytes(path),'')));});
 function fixture(rig:RigDefinition=XBOT_RIG,initialize=true){
-  const gltf=rig.id===FOX_RIG.id?fox:human,model=new Group(),bones:Record<string,Bone>={};model.add(rig.asset.kind==='procedural'?buildProceduralRig(rig).group:clone(gltf.scene));model.traverse(o=>{if(o instanceof Bone)bones[o.name]=o;});model.updateMatrixWorld(true);
+  const gltf=rig.id===YBOT_RIG.id?ybot:rig.id===FOX_RIG.id?fox:rig.id===BODYCHAN_RIG.id?bodychan:rig.id===BODYKUN_RIG.id?bodykun:human,model=new Group(),bones:Record<string,Bone>={};model.add(rig.asset.kind==='procedural'?buildProceduralRig(rig).group:clone(gltf.scene));model.traverse(o=>{if(o instanceof Bone)bones[o.name]=o;});model.updateMatrixWorld(true);
   const e=Object.create(PoseEngine.prototype) as PoseEngine;
-  Object.assign(e,{rigDefinition:rig,scene:new Scene(),model,bones,gizmo:new Object3D(),helpers:new Group(),boneDisplay:new Group(),handles:[],selected:rig.initialSelection,mode:'translate',display:'surface',ready:false,targets:{},poles:{},pins:{},hands:{Left:'张手',Right:'张手'},views:structuredClone(DEFAULT_VIEWS),cameraState:defaultCameraSettings(),name:'Scene',ground:false,fullBody:false,symmetry:{arms:false,legs:false},warning:'',handDetail:null,profile:{},appearanceGroups:new Map(),originalMeshes:[],transform:{setMode(){},attach(){},detach(){},enabled:true,showX:true,showY:true,showZ:true},onInfo:vi.fn(),onCommit:vi.fn(),fit(){},update(){},syncGizmo(){},disposed:false,center:new Vector3(0,.8,0),span:2,props:[],actorTransform:false,activeActorId:'',borrowingActor:0});
-  e.scene.add(model);for(const end of Object.keys(rig.chains)){e.targets[end]=e.world(end).toArray();if(rig===XBOT_RIG)e.poles[end]=[...e.targets[end]];}
+  Object.assign(e,{rigDefinition:rig,scene:new Scene(),model,bones,gizmo:new Object3D(),helpers:new Group(),boneDisplay:new Group(),handles:[],selected:rig.initialSelection,mode:'translate',display:'surface',ready:false,targets:{},poles:{},pins:{},hands:{Left:'张手',Right:'张手'},views:structuredClone(DEFAULT_VIEWS),cameraState:defaultCameraSettings(),name:'Scene',ground:false,fullBody:false,symmetry:{arms:false,legs:false},warning:'',handDetail:null,profile:rig===YBOT_RIG?JSON.parse(readFileSync(new URL('../public/models/ybot-profile.json',import.meta.url),'utf8')):{},appearanceGroups:new Map(),originalMeshes:[],transform:{setMode(){},attach(){},detach(){},enabled:true,showX:true,showY:true,showZ:true},onInfo:vi.fn(),onCommit:vi.fn(),fit(){},update(){},syncGizmo(){},disposed:false,center:new Vector3(0,.8,0),span:2,props:[],actorTransform:false,activeActorId:'',borrowingActor:0});
+  e.scene.add(model);for(const end of Object.keys(rig.chains)){e.targets[end]=e.world(end).toArray();if(rig.strategy==='xbot-humanoid')e.poles[end]=[...e.targets[end]];}
   e.rest=e.snapshot();e.motion=new MotionPreview(model,gltf.animations.map(c=>Object.assign(c.clone(),{uuid:c.uuid})));model.traverse(o=>{if(o instanceof Mesh)(e as any).originalMeshes.push(o);});e.ready=true;
   if(initialize)(e as any).initializeActors();e.loadActorRuntime=vi.fn(async target=>fixture(target,false).captureActorRuntime());return e;
 }
@@ -35,6 +37,31 @@ function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreater
 function importedClip(e:PoseEngine){const root=e.rest.joints.Hips.position,id='c'.repeat(64),clip=new AnimationClip('Owned clip',1,[...Object.entries(e.rest.joints).map(([n,j])=>new QuaternionKeyframeTrack(`${n}.quaternion`,[0,1],[...j.quaternion,...j.quaternion])),new VectorKeyframeTrack('Hips.position',[0,1],[...root,...root])]);Object.assign(clip,{uuid:`${XBOT_RIG.id}@1:${id}:0:v1`});clip.userData={momoMotion:{assetId:id,fileName:'owned.fbx',format:'fbx',rig:XBOT_RIG.id,rigVersion:1,adapterVersion:1,sampleRate:30,root:'Hips',rootOrigin:root,mappedBones:20,ignoredTranslations:0,reference:'skin-bind'}};return clip;}
 
 describe('独立场景角色与原控制器',()=>{
+  it('Y Bot 独立比例下的手部 IK、手势、固定、预设与多人恢复/切换',async()=>{
+    const e=withRealHandles(fixture(YBOT_RIG));e.setFullBody(true);expect(e.humanoid).toBe(true);expect(Object.keys(e.bones)).toHaveLength(66);expect(e.footContactInfo()).toEqual({});
+    const finger=e.world('LeftIndex4'),right=e.world('RightIndex4');e.applyHandGesture('Left',HAND_GESTURES.find(g=>g.id==='fist')!.values);expect(e.world('LeftIndex4').distanceTo(finger)).toBeGreaterThan(.015);expect(e.world('RightIndex4').distanceTo(right)).toBeLessThan(1e-7);
+    e.select('LeftHand');const hand=e.world('LeftHand');e.setSelectedPosition(1,hand.y+.06);expect(e.world('LeftHand').y-hand.y).toBeGreaterThan(.04);expectHandlesAligned(e);
+    e.setFeetPin(true);e.select('Hips');const feet=['LeftFoot','RightFoot'].map(n=>e.world(n));e.setSelectedPosition(1,e.world('Hips').y-.05);for(let i=0;i<2;i++)expect(e.world(['LeftFoot','RightFoot'][i]).distanceTo(feet[i])).toBeLessThan(.01);
+    e.applyPreset(YBOT_RIG.presets.find(p=>p.id==='neutral')!);expect(Object.values(e.snapshot().joints).every(j=>j.quaternion.every(Number.isFinite))).toBe(true);const first=e.info().activeActor!,pose=JSON.parse(JSON.stringify(e.snapshot()));
+    await e.duplicateActor();e.select('Head');e.setSelectedRotation(1,20);expect(actor(e,first).pose.joints).toEqual(pose.joints);await e.addActor(XBOT_RIG);await e.addActor(FOX_RIG);await e.addActor(BODYCHAN_RIG);
+    expect(e.openPose(camera(),512,512,false).people).toHaveLength(3);expect(e.sceneJoints(camera(),512,512).actors).toHaveLength(5);
+    const doc=JSON.parse(JSON.stringify(e.sceneSnapshot()));await e.restoreScene(readSceneDocument(JSON.stringify(doc)),{},false);expect(JSON.parse(JSON.stringify(e.sceneSnapshot()))).toEqual(doc);
+    e.selectActor(first);const other=e.sceneSnapshot().actors.filter(a=>a.id!==first);await e.replaceActorRig(FOX_RIG);await e.replaceActorRig(YBOT_RIG);expect(e.snapshot().joints).toEqual(pose.joints);expect(e.sceneSnapshot().actors.filter(a=>a.id!==first)).toEqual(other);
+  });
+
+  for(const rig of [BODYCHAN_RIG,BODYKUN_RIG])it(`${rig.id}真实网格 FK、多实例、四种骨架混合、保存恢复与关节导出独立`,async()=>{
+    const e=withRealHandles(fixture(rig)),first=e.info().activeActor!,lengths=Object.fromEntries(Object.entries(e.bones).map(([n,b])=>[n,b.position.length()]));
+    expect(Object.keys(e.bones)).toHaveLength(53);expectHandlesAligned(e);const hand=e.world('left_hand');
+    e.select('left_forearm');e.setSelectedRotation(0,60);expect(e.world('left_hand').distanceTo(hand)).toBeGreaterThan(.03);expect(e.canTranslate()).toBe(false);
+    for(const [n,b]of Object.entries(e.bones))expect(b.position.length()).toBeCloseTo(lengths[n],10);
+    const pose=e.snapshot();expect(parseDocument(JSON.stringify(pose),e.rest,rig).joints).toEqual(JSON.parse(JSON.stringify(pose.joints)));
+    const original=actor(e);await e.duplicateActor();const duplicate=e.info().activeActor!;e.select('left_forearm');e.setSelectedRotation(0,20);expect(actor(e,first)).toEqual(original);expect(e.bones.left_forearm).not.toBe((e as any).actors.get(first).state.bones.left_forearm);
+    await e.addActor(rig===BODYCHAN_RIG?BODYKUN_RIG:BODYCHAN_RIG);await e.addActor(FOX_RIG);await e.addActor(XBOT_RIG);
+    expect(e.openPose(camera(),512,512,false).people).toHaveLength(1);expect(e.sceneJoints(camera(),512,512).actors).toHaveLength(5);
+    const saved=JSON.parse(JSON.stringify(e.sceneSnapshot()));await e.restoreScene(readSceneDocument(JSON.stringify(saved)),{},false);expect(JSON.parse(JSON.stringify(e.sceneSnapshot()))).toEqual(saved);
+    e.selectActor(duplicate);const others=e.sceneSnapshot().actors.filter(a=>a.id!==duplicate),before=e.snapshot();await e.replaceActorRig(FOX_RIG);await e.replaceActorRig(rig);expect(e.snapshot().joints).toEqual(before.joints);expect(e.sceneSnapshot().actors.filter(a=>a.id!==duplicate)).toEqual(others);
+  });
+
   it('线稿显示切换不改动同骨架多实例或混合角色，线宽属于共享场景并可恢复',async()=>{
     const e=fixture();await e.duplicateActor();await e.addActor(FOX_RIG);e.camera=camera();const actors=e.sceneSnapshot().actors;
     for(const mode of ['lineart','skeleton','surface','lineart'] as const){e.setDisplay(mode);expect(e.sceneSnapshot().actors).toEqual(actors);for(const a of (e as any).actors.values())expect(a.state.model.visible).toBe(mode!=='skeleton');}
