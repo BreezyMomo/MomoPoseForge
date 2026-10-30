@@ -6,7 +6,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { solveTwoBone, solveLimbRotations, projectPoint } from './math';
 import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, FINGER_PART_NAMES, DIGITS, type Digit, type Side, type HandValues, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
-import {XBOT_RIG,type RigDefinition} from './rigs';
+import {XBOT_RIG,requireRig,type RigDefinition} from './rigs';
+import {parseDocument} from './files';
+import {actorPose,poseWithScene,readSceneDocument,relocatePose,MAX_ACTORS,type SceneActor,type SceneDocument,type ActorSummary} from './sceneDocument';
 import {buildProceduralRig,disposeObject,ensureRigNormals,visibleSurfaceBounds} from './rigGeometry';
 import {fkAngles,fkRotation,constrainFk} from './fkControls';
 import {solveRigChain,solveRigContacts,type ArticulatedRig} from './articulatedIK';
@@ -27,12 +29,15 @@ import {parseCharacter} from './characterImport';
 import {characterLibrary} from './characterLibrary';
 import {parseMotionSource,checkMotionAbort,MAX_MOTION_BYTES} from './motionImport';
 import {retargetMixamoMotion} from './mixamoMotion';
-import {motionLibrary,packMotionAsset,unpackMotionAsset} from './motionLibrary';
+import {motionLibrary,packMotionAsset,unpackMotionAsset,type MotionAsset} from './motionLibrary';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 // These routines are the X Bot humanoid strategy. Generic FK rigs never enter them.
 const CHAINS = XBOT_RIG.chains;
 const asVec = (v: THREE.Vector3): Vec3 => v.toArray() as Vec3;
+type ActorRuntime=ReturnType<PoseEngine['captureActorRuntime']>;
+type ActorSlot={id:string;name:string;visible:boolean;locked:boolean;state:ActorRuntime;drafts:Map<string,PoseDocument>};
+export type SceneLoadOptions={appearanceBytes?:(ref:AppearanceRef)=>ArrayBuffer|undefined;prepareActor?:(controller:PoseEngine,id:string)=>Promise<void>;beforeCommit?:(signal:AbortSignal)=>Promise<void>};
 
 export class PoseEngine {
   // Prototype is also used by the headless X Bot regression fixtures.
@@ -91,6 +96,14 @@ export class PoseEngine {
   appearance?:AppearanceRef;
   private appearanceGroups=new Map<string,THREE.Group>();
   private originalMeshes:THREE.Mesh[]=[];
+  private actors?:Map<string,ActorSlot>;
+  private activeActorId='';
+  actorTransform=false;
+  private sceneLoad?:AbortController;
+  private borrowingActor=0;
+  private interactionBlocked=false;
+  private sceneEpoch=0;
+  private nextSceneIntent(){this.sceneLoad?.abort();this.sceneLoad=undefined;return this.sceneEpoch=(this.sceneEpoch??0)+1;}
   disposed = false;
   private resizeObserver: ResizeObserver;
   private frame = 0;
@@ -159,7 +172,7 @@ export class PoseEngine {
     this.renderer.domElement.ownerDocument.addEventListener('visibilitychange',this.poseVisibility);
     this.fly=new FlyCameraControls(this.renderer.domElement,()=>this.camera,()=>this.syncNavigationTarget(),active=>{
       if(active){
-        if(this.transform.dragging||!this.canNavigateCamera())return false;
+        if(this.interactionBlocked||this.sceneLoad||this.transform.dragging||!this.canNavigateCamera())return false;
         if(this.camera instanceof THREE.OrthographicCamera){this.camera=perspectiveForNavigation(this.camera,this.orbit.target,this.cameraState.fov);this.orbit.object=this.camera;this.transform.camera=this.camera;}
         this.navigationDistance=this.camera.position.distanceTo(this.orbit.target);
         this.orbit.enabled=false;this.transform.enabled=false;this.view='free';
@@ -222,12 +235,13 @@ export class PoseEngine {
     this.syncTargets();this.syncGizmo();this.update(true);this.commit();
   }
   sceneBounds(){
-    const box=visibleSurfaceBounds(this.model);
+    this.stashActor();const box=new THREE.Box3();
+    if(this.actors){for(const actor of this.actors.values())if(actor.visible)box.union(visibleSurfaceBounds(actor.state.model));}else box.union(visibleSurfaceBounds(this.model));
     if(this.propLayer?.children.length)box.union(new THREE.Box3().setFromObject(this.propLayer,true));
     return box;
   }
 
-  async load() {
+  async load(actorOnly=false) {
     const asset=this.activeRig.asset;
     if(asset.kind==='procedural'){
       const {group}=buildProceduralRig(this.activeRig);if(this.disposed){disposeObject(group);return;}this.model.add(group);
@@ -274,7 +288,94 @@ export class PoseEngine {
       handle.userData.part = name; handle.renderOrder = 100; this.helpers.add(handle); this.handles.push(handle);
     }
     this.ready = true;
+    if(actorOnly)return;
+    this.initializeActors();
     this.update(true); this.select(this.activeRig.initialSelection);
+  }
+
+  /** References owned by one character, independent of the renderer and shared scene. */
+  captureActorRuntime(){return {rigDefinition:this.activeRig,model:this.model,bones:this.bones,helpers:this.helpers,boneDisplay:this.boneDisplay,handles:this.handles,rest:this.rest,targets:this.targets,poles:this.poles,pins:this.pins,hands:this.hands,ground:this.ground,fullBody:this.fullBody,symmetry:this.symmetry,selected:this.selected,mode:this.mode,warning:this.warning,handDetail:this.handDetail,vertexCount:this.vertexCount,motion:this.motion,motionBefore:this.motionBefore,motionNotify:this.motionNotify,appearance:this.appearance,appearanceGroups:this.appearanceGroups,originalMeshes:this.originalMeshes,profile:this.profile,lastSolveStats:this.lastSolveStats};}
+  private bindActor(state:ActorRuntime){Object.assign(this,state);}
+  private stashActor(){if(this.borrowingActor)return;const slot=this.actors?.get(this.activeActorId);if(slot)slot.state=this.captureActorRuntime();}
+  private usingActor<T>(slot:ActorSlot,run:()=>T):T{const previous=this.captureActorRuntime();this.borrowingActor=(this.borrowingActor??0)+1;this.bindActor(slot.state);try{return run();}finally{slot.state=this.captureActorRuntime();this.bindActor(previous);this.borrowingActor--;}}
+  private initializeActors(){const id=crypto.randomUUID();this.activeActorId=id;this.model.userData.actorId=id;this.actors=new Map([[id,{id,name:this.activeRig.name,visible:true,locked:false,state:this.captureActorRuntime(),drafts:new Map()}]]);}
+  get actorEditable(){const slot=this.actors?.get(this.activeActorId);return !this.sceneLoad&&(!slot||slot.visible&&!slot.locked);}
+  setInteractionBlocked(value:boolean){this.interactionBlocked=value;if(value){this.interruptPoseDrag();this.fly?.stop();}this.refreshActors();if(this.orbit)this.orbit.enabled=!value&&this.canNavigateCamera()&&!this.transform.dragging;if(this.ready)this.onInfo(this.info());}
+  actorList():ActorSummary[]{this.stashActor();return [...(this.actors?.values()??[])].map(a=>({id:a.id,name:a.name,rig:a.state.rigDefinition.id,rigVersion:a.state.rigDefinition.version,visible:a.visible,locked:a.locked,position:asVec(a.state.model.position),rotation:[0,THREE.MathUtils.radToDeg(new THREE.Euler().setFromQuaternion(a.state.model.quaternion,'YXZ').y),0]}));}
+  sceneSnapshot():SceneDocument{
+    this.stashActor();const doc=this.snapshot();return {format:'momo-pose-forge-scene',version:1,name:this.name,activeActor:this.activeActorId,actors:[...(this.actors?.values()??[])].map(a=>({id:a.id,name:a.name,visible:a.visible,locked:a.locked,pose:actorPose(this.usingActor(a,()=>this.snapshot()))})),views:doc.views,camera:doc.camera,referenceImage:doc.referenceImage,props:doc.props};
+  }
+  actorMotions(){this.stashActor();return [...(this.actors?.values()??[])].map(a=>({actorId:a.id,name:a.name,rig:a.state.rigDefinition,clips:a.state.motion?.importedClips()??[],state:a.state.motion?.state()}));}
+  selectedThumbnail(){const actors=[...(this.actors?.values()??[])],visibility=actors.map(a=>({a,visible:a.visible})),center=this.center.clone(),span=this.span,propsVisible=this.propLayer?.visible;try{actors.forEach(a=>{a.visible=a.id===this.activeActorId;});if(this.propLayer)this.propLayer.visible=false;this.fit(false,true);return this.renderImage(DEFAULT_VIEWS[1],112,136,'surface').toDataURL('image/webp',.8);}finally{visibility.forEach(({a,visible})=>{a.visible=visible;});if(this.propLayer&&propsVisible!==undefined)this.propLayer.visible=propsVisible;this.center.copy(center);this.span=span;}}
+  presetThumbnails(){
+    const before=this.snapshot(),actors=this.actors,info=this.onInfo,commit=this.onCommit,center=this.center.clone(),span=this.span,camera=structuredClone(this.cameraState),visibility=[...(actors?.values()??[])].filter(a=>a.id!==this.activeActorId).flatMap(a=>[a.state.model,a.state.helpers,a.state.boneDisplay].map(object=>({object,visible:object.visible}))),result:Record<string,string>={};
+    this.actors=undefined;this.onInfo=()=>{};this.onCommit=()=>{};visibility.forEach(v=>{v.object.visible=false;});
+    try{for(const preset of this.activeRig.presets){this.applyPreset(preset,false);result[preset.id]=this.renderImage({...DEFAULT_VIEWS[1],azimuth:22},112,136,'surface').toDataURL('image/webp',.85);}return result;}
+    finally{this.apply(before,false,false,false,true,false);this.name=before.name;this.center.copy(center);this.span=span;this.cameraState=camera;this.actors=actors;visibility.forEach(v=>{v.object.visible=v.visible;});this.onInfo=info;this.onCommit=commit;this.syncGizmo();this.refreshActors(true);}
+  }
+  private controller(state?:ActorRuntime,rig:RigDefinition=this.activeRig){
+    const controller=Object.create(PoseEngine.prototype) as PoseEngine;
+    Object.assign(controller,{rigDefinition:rig,model:new THREE.Group(),bones:{},helpers:new THREE.Group(),boneDisplay:new THREE.Group(),handles:[],targets:{},poles:{},pins:{},hands:{Left:'张手',Right:'张手'},ground:rig.capabilities.floor,fullBody:rig.capabilities.fullBodyIK,symmetry:defaultSymmetry(),selected:rig.initialSelection,mode:'translate',warning:'',handDetail:null,vertexCount:0,appearanceGroups:new Map(),originalMeshes:[],profile:{},lastSolveStats:{iterations:0,error:0,fixedError:0,milliseconds:0},cameraState:defaultCameraSettings(),views:structuredClone(DEFAULT_VIEWS),name:'未命名姿势',props:[],ready:false,disposed:false,onInfo:()=>{},onCommit:()=>{}});
+    if(state)Object.assign(controller,state);return controller;
+  }
+  async loadActorRuntime(rig:RigDefinition){const controller=this.controller(undefined,rig);try{await controller.load(true);await controller.restoreMotionLibrary().catch(()=>0);return controller.captureActorRuntime();}catch(e){this.disposeActorRuntime(controller.captureActorRuntime());throw e;}}
+  private disposeActorRuntime(state:ActorRuntime){state.motion?.dispose();for(const group of [state.model,state.helpers,state.boneDisplay]){group.removeFromParent();disposeObject(group);}}
+  private refreshActors(rebuildSkeleton=false){
+    if(!this.actors)return;this.stashActor();
+    for(const slot of this.actors.values()){
+      const s=slot.state;for(const group of [s.model,s.helpers,s.boneDisplay])if(group.parent!==this.scene)this.scene.add(group);
+      s.model.userData.actorId=slot.id;s.model.visible=slot.visible&&this.display==='surface';
+      s.helpers.visible=slot.id===this.activeActorId&&slot.visible&&!slot.locked&&!s.motion?.active&&!this.actorTransform;
+      s.boneDisplay.visible=slot.visible&&this.display==='skeleton';if(rebuildSkeleton&&s.boneDisplay.visible)this.usingActor(slot,()=>this.updateSkeletonDisplay());
+    }
+    if(this.actorEditable&&!this.interactionBlocked&&!this.motion?.active){this.transform.enabled=true;this.transform.attach(this.gizmo);}else{this.transform.enabled=false;this.transform.detach();}
+  }
+  selectActor(id:string){if(this.sceneLoad||this.interactionBlocked)return;const slot=this.actors?.get(id);if(!slot||id===this.activeActorId)return;this.nextSceneIntent();this.prepareSwitch();this.stashActor();this.activeActorId=id;this.bindActor(slot.state);this.handDetail=null;this.setMode(this.mode);this.refreshActors(true);this.update(false);this.onCommit(this.snapshot(),false);}
+  setActorTransform(value:boolean){this.prepareSwitch();this.actorTransform=value;this.transform.showX=this.transform.showZ=!value||this.mode!=='rotate';this.transform.showY=true;this.syncGizmo();this.refreshActors();this.onInfo(this.info());}
+  changeActor(id:string,patch:Partial<Pick<SceneActor,'name'|'visible'|'locked'>>){const slot=this.actors?.get(id);if(!slot)return;if(patch.name!==undefined&&(!patch.name.trim()||patch.name.trim().length>80))throw new Error('角色名称须为 1–80 个字符');this.prepareSwitch();Object.assign(slot,patch,patch.name!==undefined?{name:patch.name.trim()}:{});this.refreshActors();this.update(true);this.commit();}
+  moveActor(position:Vec3,yaw:number,commit=true){if(!this.actorEditable||!position.every(n=>Number.isFinite(n)&&Math.abs(n)<=10)||!Number.isFinite(yaw))return;this.prepareSwitch();const pose=relocatePose(this.snapshot(),{position,quaternion:new Q().setFromAxisAngle(new V(0,1,0),THREE.MathUtils.degToRad(yaw)).toArray()});this.restorePose(pose);this.syncGizmo();this.update(true);if(commit)this.commit();}
+  private activateScene(doc:SceneDocument,slots:Map<string,ActorSlot>){
+    for(const slot of this.actors?.values()??[])for(const group of [slot.state.model,slot.state.helpers,slot.state.boneDisplay])group.removeFromParent();
+    this.actors=slots;this.activeActorId=doc.activeActor;this.name=doc.name;this.views=structuredClone(doc.views);this.cameraState=structuredClone(doc.camera??defaultCameraSettings());this.referenceImage=structuredClone(doc.referenceImage);this.props=structuredClone(doc.props??[]);this.syncPropScene();
+    // Validated project snapshots are exact state, not a new IK solve. Re-projecting
+    // limits here would slowly alter untouched actors during selection and undo.
+    for(const actor of doc.actors){const slot=slots.get(actor.id)!;this.usingActor(slot,()=>this.apply(poseWithScene(actor.pose,doc),false,false,false,true,false));}
+    this.bindActor(slots.get(doc.activeActor)!.state);this.refreshActors(true);this.fit(false);this.syncGizmo();this.transform.setMode(this.mode);
+    if(this.camera&&this.orbit){if(doc.camera)this.restoreObservation(doc.camera.active,doc.camera.view);else this.setView('free',false);this.orbit.enabled=this.canNavigateCamera();}
+  }
+  async restoreScene(input:SceneDocument,options:SceneLoadOptions={},history=true,prefetched?:Map<string,ActorRuntime>,requestEpoch?:number){
+    const doc=readSceneDocument(JSON.stringify(input)),epoch=requestEpoch??this.nextSceneIntent();this.prepareSwitch();this.stashActor();this.sceneLoad?.abort();const controller=new AbortController();this.sceneLoad=controller;
+    const previousSlots=this.actors!,previous=this.sceneSnapshot(),next=new Map<string,ActorSlot>(),created:ActorRuntime[]=[...(prefetched?.values()??[])];
+    const check=()=>{if(this.disposed||controller.signal.aborted||epoch!==this.sceneEpoch)throw new DOMException('场景加载已取消','AbortError');};
+    try{
+      for(const actor of doc.actors){check();const rig=requireRig(actor.pose.rig),old=previousSlots.get(actor.id),reuse=!options.prepareActor&&old?.state.rigDefinition.id===rig.id&&old.state.rigDefinition.version===rig.version;
+        const state=reuse?old!.state:prefetched?.get(actor.id)??await this.loadActorRuntime(rig);if(!reuse&&!created.includes(state))created.push(state);check();
+        const local=this.controller(state),abort=()=>{local.disposed=true;};controller.signal.addEventListener('abort',abort,{once:true});
+        try{actor.pose=actorPose(parseDocument(JSON.stringify(poseWithScene(actor.pose,doc)),state.rest,rig));if(actor.pose.appearance)await local.prepareAppearance(actor.pose.appearance,options.appearanceBytes?.(actor.pose.appearance));await options.prepareActor?.(local,actor.id);check();}
+        finally{controller.signal.removeEventListener('abort',abort);}
+        next.set(actor.id,{id:actor.id,name:actor.name,visible:actor.visible,locked:actor.locked,state:local.captureActorRuntime(),drafts:new Map(old?.drafts??[])});
+      }
+      check();
+      // Render the candidate synchronously, then restore the live scene before waiting on storage.
+      const onInfo=this.onInfo,onCommit=this.onCommit;this.onInfo=()=>{};this.onCommit=()=>{};
+      try{this.activateScene(doc,next);if(this.renderer)this.getThumbnails();}finally{this.activateScene(previous,previousSlots);this.onInfo=onInfo;this.onCommit=onCommit;}
+      await options.beforeCommit?.(controller.signal);check();
+      this.sceneLoad=undefined;this.activateScene(doc,next);for(const old of previousSlots.values())if(![...next.values()].some(a=>a.state.model===old.state.model))this.disposeActorRuntime(old.state);
+      this.update(true);this.onCommit(this.snapshot(),history);
+    }catch(e){for(const state of created)if(![...(this.actors?.values()??[])].some(a=>a.state.model===state.model))this.disposeActorRuntime(state);throw e;}
+    finally{if(this.sceneLoad===controller){this.sceneLoad=undefined;if(!this.disposed){this.refreshActors();this.onInfo(this.info());}}}
+  }
+  async addActor(rig:RigDefinition){if((this.actors?.size??0)>=MAX_ACTORS)throw new Error(`场景最多 ${MAX_ACTORS} 个角色`);const epoch=this.nextSceneIntent(),state=await this.loadActorRuntime(rig);if(this.disposed||epoch!==this.sceneEpoch){this.disposeActorRuntime(state);throw new DOMException('场景加载已取消','AbortError');}const local=this.controller(state),doc=this.sceneSnapshot(),id=crypto.randomUUID();let pose=local.snapshot();const index=doc.actors.length;pose=relocatePose(pose,{position:[index%2?1:-1,0,Math.floor(index/2)*.8],quaternion:[0,0,0,1]});doc.actors.push({id,name:rig.name,visible:true,locked:false,pose:actorPose(pose)});doc.activeActor=id;await this.restoreScene(doc,{},true,new Map([[id,state]]),epoch);}
+  async duplicateActor(){const doc=this.sceneSnapshot(),source=doc.actors.find(a=>a.id===doc.activeActor)!;if(doc.actors.length>=MAX_ACTORS)throw new Error(`场景最多 ${MAX_ACTORS} 个角色`);const copy=structuredClone(source);copy.id=crypto.randomUUID();copy.name=`${copy.name.slice(0,72)} 副本`;copy.locked=false;copy.visible=true;const p=[...copy.pose.root.position] as Vec3;p[0]=Math.min(10,p[0]+.8);copy.pose=relocatePose(copy.pose,{...copy.pose.root,position:p});doc.actors.push(copy);doc.activeActor=copy.id;await this.restoreScene(doc);}
+  async removeActor(id:string){const doc=this.sceneSnapshot();if(doc.actors.length<=1)throw new Error('场景至少保留一个角色');doc.actors=doc.actors.filter(a=>a.id!==id);if(doc.activeActor===id)doc.activeActor=doc.actors[0].id;await this.restoreScene(doc);}
+  async replaceActorRig(rig:RigDefinition){
+    const slot=this.actors!.get(this.activeActorId)!;if(!slot.visible||slot.locked)throw new Error('请先显示并解锁角色');const epoch=this.nextSceneIntent();
+    if(slot.state.rigDefinition.id===rig.id){this.refreshActors();this.onInfo(this.info());return;}
+    this.prepareSwitch();const doc=this.sceneSnapshot(),actor=doc.actors.find(a=>a.id===slot.id)!;slot.drafts.set(actor.pose.rig,actor.pose);const state=await this.loadActorRuntime(rig);
+    if(this.disposed||epoch!==this.sceneEpoch){this.disposeActorRuntime(state);throw new DOMException('场景加载已取消','AbortError');}
+    actor.pose=relocatePose(slot.drafts.get(rig.id)??this.controller(state).snapshot(),actor.pose.root);
+    Object.assign(doc,{name:this.name,views:structuredClone(this.views),camera:this.getCameraSettings(),referenceImage:structuredClone(this.referenceImage),props:structuredClone(this.props)});
+    await this.restoreScene(doc,{},true,new Map([[actor.id,state]]),epoch);
   }
 
   world(name: string) { return this.bones[name].getWorldPosition(new V()); }
@@ -488,7 +589,7 @@ export class PoseEngine {
     if(this.ready){this.onInfo(this.info());this.onCommit(this.snapshot(),false);}
   }
   private activeSymmetry(name:string){if(!this.activeRig.capabilities.mirror)return null;const pair=symmetricLimb(name);return pair&&this.symmetry?.[pair.group]?pair:null;}
-  private beginPoseDrag(){this.dragBefore=this.snapshot();this.cancelPending=false;}
+  private beginPoseDrag(){if(!this.actorEditable||this.interactionBlocked)return;this.dragBefore=this.snapshot();this.cancelPending=false;}
   private finishPoseDrag(){
     if(!this.dragBefore)return;if(this.cancelPending)this.restorePose(this.dragBefore);
     const changed=!this.cancelPending&&(!this.activeSymmetry(this.selected)||this.poseChanged(this.dragBefore));this.dragBefore=null;
@@ -524,7 +625,9 @@ export class PoseEngine {
   }
 
   private manipulate() {
+    if(!this.actorEditable||this.interactionBlocked)return false;
     if(this.cancelPending&&this.dragBefore)return false;
+    if(this.actorTransform){const baseline=this.dragBefore??this.snapshot(),next=relocatePose(baseline,{position:asVec(this.gizmo.position),quaternion:this.gizmo.quaternion.toArray()});if(next.root.position.some(n=>Math.abs(n)>10))return false;this.restorePose(next);this.update(false);return true;}
     if(!this.humanoid){
       if(this.dragBefore)this.restorePose(this.dragBefore);
       const bone=this.bones[this.selected];if(!bone)return false;
@@ -585,15 +688,18 @@ export class PoseEngine {
   }
 
   private pointerDown = (event: PointerEvent) => {
-    if (!this.ready || this.motion?.active || event.button!==0 || this.transform.axis) return;
+    if (!this.ready || this.sceneLoad || this.interactionBlocked || this.motion?.active || event.button!==0 || this.transform.axis) return;
     const rect=this.renderer.domElement.getBoundingClientRect();
     this.pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     this.raycaster.setFromCamera(this.pointer,this.camera);
-    const hit=this.raycaster.intersectObjects(this.handles.filter(h=>h.visible))[0];
-    if(hit) this.select(hit.object.userData.part);
+    const hit=this.actorEditable&&!this.actorTransform?this.raycaster.intersectObjects(this.handles.filter(h=>h.visible))[0]:undefined;
+    if(hit){this.select(hit.object.userData.part);return;}
+    const roots=[...(this.actors?.values()??[])].filter(a=>a.visible&&!a.locked).map(a=>a.state.model);
+    const surface=this.raycaster.intersectObjects(roots,true)[0];if(surface){let object:THREE.Object3D|null=surface.object;while(object&&!object.userData.actorId)object=object.parent;if(object)this.selectActor(object.userData.actorId);}
   };
 
   select(name: string) {
+    if(!this.actorEditable)return;
     if(this.motion?.active)return;
     if(!this.bones[name])return;
     this.selected=name;this.warning='';
@@ -601,12 +707,13 @@ export class PoseEngine {
     this.setMode(this.canTranslate(name)?'translate':'rotate');
     this.syncGizmo(); this.transform.attach(this.gizmo); this.update(false);
   }
-  canTranslate(name=this.selected){return this.humanoid?(!!CHAINS[name]||name===this.activeRig.root||name==='Chest'||Object.values(CHAINS).some(c=>c[1]===name)):name===this.activeRig.root||!!this.activeRig.ik&&!!this.activeRig.chains[name];}
-  setMode(mode: 'translate'|'rotate') { this.mode=mode==='translate'&&!this.canTranslate()?'rotate':mode; this.transform.setMode(this.mode); this.syncGizmo();if(this.ready)this.onInfo(this.info()); }
+  canTranslate(name=this.selected){return this.actorTransform||this.humanoid?(this.actorTransform||!!CHAINS[name]||name===this.activeRig.root||name==='Chest'||Object.values(CHAINS).some(c=>c[1]===name)):name===this.activeRig.root||!!this.activeRig.ik&&!!this.activeRig.chains[name];}
+  setMode(mode: 'translate'|'rotate') { this.mode=mode==='translate'&&!this.canTranslate()?'rotate':mode; this.transform.setMode(this.mode);this.transform.showX=this.transform.showZ=!this.actorTransform||this.mode!=='rotate';this.transform.showY=true; this.syncGizmo();if(this.ready)this.onInfo(this.info()); }
   setSpace(space:'world'|'local') { this.transform.setSpace(space); }
   private syncGizmo() {
     if(!this.ready)return;
     this.suppress=true;
+    if(this.actorTransform){this.gizmo.position.copy(this.model.position);this.gizmo.quaternion.copy(this.model.quaternion);this.suppress=false;return;}
     this.gizmo.position.copy(this.world(this.selected));
     this.gizmo.quaternion.copy(this.bones[this.selected].getWorldQuaternion(new Q()));
     this.suppress=false;
@@ -620,7 +727,7 @@ export class PoseEngine {
     this.camera=new THREE.PerspectiveCamera(this.cameraState.fov,this.host.clientWidth/Math.max(1,this.host.clientHeight),.01,100);
     this.camera.position.copy(center).addScaledVector(direction,.52);this.camera.lookAt(center);this.orbit.object=this.camera;this.orbit.target.copy(center);this.transform.camera=this.camera;this.orbit.update();this.commitCamera();
   }
-  setDisplay(mode:'surface'|'skeleton'){this.display=mode;this.model.visible=mode==='surface';this.boneDisplay.visible=mode==='skeleton';this.update(false);}
+  setDisplay(mode:'surface'|'skeleton'){this.display=mode;this.model.visible=mode==='surface';this.boneDisplay.visible=mode==='skeleton';this.refreshActors(true);this.update(false);}
   setGrid(value:boolean){this.grid.visible=value;}
   setGround(value:boolean){if(!this.activeRig.capabilities.floor)return;this.ground=value;this.commit();}
   setFullBody(value:boolean){if(!this.activeRig.capabilities.fullBodyIK)return;this.fullBody=value;this.update(false);this.commit();}
@@ -708,14 +815,15 @@ export class PoseEngine {
   resetSelected(){const rest=this.rest.joints[this.selected];if(!rest)return;const paired=this.pairedEdit(this.selected,()=>{this.bones[this.selected].quaternion.fromArray(rest.quaternion);});if(paired!==null){if(paired){this.syncGizmo();this.commit();}return;}const baseline=this.snapshot();this.bones[this.selected].quaternion.fromArray(rest.quaternion);this.bones[this.selected].position.fromArray(rest.position);this.markCustomHand(this.selected);delete this.pins[this.selected as Effector];this.bones[this.selected].updateWorldMatrix(false,true);this.solvePins();this.keepPinnedPose(baseline);this.syncTargets();this.update(true);this.syncGizmo();this.commit();}
 
   applyPreset(preset:Preset,commit=true,scope:PresetScope='all'){
+    if(!this.actorEditable)throw new Error('请先显示并解锁角色');
     if(!this.activeRig.presets.some(p=>p.id===preset.id))throw new Error('此预设不适用于当前骨架');
     if(!this.humanoid){
-      const before=this.snapshot();this.apply({...this.rest,appearance:before.appearance,name:before.name,selection:before.selection,views:before.views,camera:before.camera,props:before.props,referenceImage:before.referenceImage},true,false,false,false);if(commit)this.commit();return;
+      const before=this.snapshot();this.apply({...relocatePose(this.rest,before.root),appearance:before.appearance,name:before.name,selection:before.selection,views:before.views,camera:before.camera,props:before.props,referenceImage:before.referenceImage},true,false,false,false);if(commit)this.commit();return;
     }
     // Refuse conflicting contacts before changing anything. Untouched pins stay fixed.
     if(scope!=='all'&&Object.keys(this.pins).some(end=>scope==='lower'||scope==='upper'&&end.endsWith('Hand')))
       throw new Error(scope==='lower'?'下半身包含骨盆，会带动全身；请先解除固定的手脚':'请先解除手部固定，再套用上半身姿势');
-    const before=scope==='all'?null:this.snapshot();
+    const placement=this.snapshot().root,before=scope==='all'?null:this.snapshot();
     const views=this.views,name=this.name,fullBody=this.fullBody,props=this.props??[],appearance=this.appearance;
     this.apply({...this.rest,appearance},false,false);this.props=props;this.syncPropScene();this.views=views;this.fullBody=fullBody;this.name=commit?preset.name:name;
     this.pins={};this.ground=preset.ground??true;this.warning='';
@@ -738,6 +846,7 @@ export class PoseEngine {
       if(end.endsWith('Foot'))this.setWorldQuaternion(this.bones[end],new Q());
     }
     this.applyHandShape('Left',preset.handShape??'张手');this.applyHandShape('Right',preset.handShape??'张手');
+    if(!before)this.restorePose(relocatePose(this.snapshot(),placement));
     if(before){
       // Transfer local joint transforms so a standing arm preset also works seated.
       // Restore directly to leave every excluded joint bit-for-bit unchanged.
@@ -801,25 +910,32 @@ export class PoseEngine {
   async prepareAppearance(ref:AppearanceRef,bytes?:ArrayBuffer){
     if(!validAppearance(ref,this.activeRig))throw new Error('角色外观与当前骨架不兼容');
     if(this.appearanceGroups.has(ref.id))return;
+    const rig=this.activeRig,rest=this.rest,bones=this.bones,model=this.model,groups=this.appearanceGroups;
+    const obsolete=()=>this.disposed||!!this.actors&&![...this.actors.values()].some(a=>a.state.model===model);
     if(!bytes){
-      const builtin=this.activeRig.appearances?.find(a=>a.id===ref.id);
+      const builtin=rig.appearances?.find(a=>a.id===ref.id);
       if(builtin){const response=await fetch(builtin.url);if(!response.ok)throw new Error('内置角色外观加载失败');bytes=await response.arrayBuffer();}
       else{const saved=await characterLibrary.get(ref);if(!saved)throw new Error(`本机缺少角色外观“${ref.name}”，请先导入对应文件或完整工程包`);bytes=saved.bytes;}
     }
-    if(this.disposed)return;
+    if(obsolete())return;
     const digest=await crypto.subtle.digest('SHA-256',bytes),hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
     if(hash!==ref.id)throw new Error('角色文件与工程外观引用不一致');
     const source=await parseCharacter(bytes,ref.format??'glb');
     try{
-      if(this.disposed)return;
-      const group=buildAppearance(source.scene,this.activeRig,this.rest,this.bones);group.visible=false;
-      if(this.appearanceGroups.has(ref.id)){disposeObject(group);return;}
-      this.model.add(group);this.appearanceGroups.set(ref.id,group);
+      if(obsolete())return;
+      const group=buildAppearance(source.scene,rig,rest,bones);group.visible=false;
+      if(groups.has(ref.id)){disposeObject(group);return;}
+      model.add(group);groups.set(ref.id,group);
     }finally{source.dispose();}
   }
-  renameAppearance(id:string,name:string){if(this.appearance?.id===id){this.appearance={...this.appearance,name};if(this.motionBefore)this.motionBefore.appearance={...this.appearance};this.onInfo(this.info());this.onCommit(this.snapshot(),false);}}
-  renameMotion(id:string,name:string){this.motion?.rename(id,name);this.onInfo(this.info());}
-  removeMotion(id:string){if(this.motion?.state().clip===id)this.cancelMotion();this.motion?.remove(id);this.onInfo(this.info());}
+  renameAppearance(id:string,name:string,rig=this.activeRig.id){
+    if(this.actors){this.stashActor();for(const a of this.actors.values())if(a.state.rigDefinition.id===rig&&a.state.appearance?.id===id){a.state.appearance={...a.state.appearance,name};if(a.state.motionBefore)a.state.motionBefore.appearance={...a.state.appearance};}this.bindActor(this.actors.get(this.activeActorId)!.state);}
+    else if(this.appearance?.id===id){this.appearance={...this.appearance,name};if(this.motionBefore)this.motionBefore.appearance={...this.appearance};}
+    this.onInfo(this.info());this.onCommit(this.snapshot(),false);
+  }
+  renameMotion(id:string,name:string){this.stashActor();if(this.actors)for(const a of this.actors.values())a.state.motion?.rename(id,name);else this.motion?.rename(id,name);this.onInfo(this.info());}
+  removeMotion(id:string){if(this.motion?.state().clip===id)this.cancelMotion();this.stashActor();if(this.actors)for(const a of this.actors.values())a.state.motion?.remove(id);else this.motion?.remove(id);this.onInfo(this.info());}
+  restoreMotionAsset(asset:MotionAsset){this.stashActor();if(!this.actors){this.installImportedMotions(unpackMotionAsset(asset,this.activeRig,this.rest));return;}const prepared=[...this.actors.values()].filter(a=>a.state.rigDefinition.id===asset.rig&&a.state.rigDefinition.version===asset.rigVersion).map(a=>({a,clips:unpackMotionAsset(asset,a.state.rigDefinition,a.state.rest)}));for(const {a,clips}of prepared){a.state.motion??=new MotionPreview(a.state.model,[]);a.state.motion.append(clips);}this.bindActor(this.actors.get(this.activeActorId)!.state);this.onInfo(this.info());}
   setAppearance(ref?:AppearanceRef,commit=true){
     if(ref&&(!validAppearance(ref,this.activeRig)||!this.appearanceGroups?.has(ref.id)))throw new Error('请先载入兼容的角色外观');
     for(const mesh of this.originalMeshes??[])mesh.visible=!ref;
@@ -833,10 +949,10 @@ export class PoseEngine {
   async prepareMotionImport(file:Pick<File,'name'|'size'|'arrayBuffer'>,signal?:AbortSignal){
     if(!this.activeRig.motionImport)throw new Error('当前骨架尚未适配外部动画；请切换到人体骨架');
     if(file.size>MAX_MOTION_BYTES)throw new Error('请导入 32 MB 以内的 FBX 或 GLB 动画');
-    const bytes=await file.arrayBuffer();checkMotionAbort(signal);
+    const rig=this.activeRig,rest=this.rest,bones=this.bones,bytes=await file.arrayBuffer();checkMotionAbort(signal);
     const digest=await crypto.subtle.digest('SHA-256',bytes),id=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
     const source=await parseMotionSource(bytes,file.name,signal);
-    try{return await retargetMixamoMotion(source,this.activeRig,this.rest,this.bones,id,file.name,signal);}finally{source.dispose();}
+    try{return await retargetMixamoMotion(source,rig,rest,bones,id,file.name,signal);}finally{source.dispose();}
   }
   installImportedMotions(clips:THREE.AnimationClip[]){
     if(this.disposed)return;
@@ -851,6 +967,7 @@ export class PoseEngine {
   }
   setMotionInPlace(value:boolean){this.motion?.setInPlace(value);this.update(false);}
   previewMotion(id:string){
+    if(!this.actorEditable)throw new Error('请先显示并解锁角色');
     if(!this.motion||!this.ready)return;
     // Validate before interrupting an existing preview or pose.
     if(!this.motion.state().clips.some(c=>c.id===id))throw new Error('此动画不属于当前骨架');
@@ -917,7 +1034,7 @@ export class PoseEngine {
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
     const rotation=this.humanoid?[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3:fkAngles(bone?.quaternion??new Q(),this.restRotation(),this.rigJoint());
-    return {motion:this.motion?.state(),appearance:this.appearance,ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),fixedContacts:(this.activeRig.supportContacts??this.activeRig.contacts).filter(end=>this.pins[end]).length,warning:this.warning,symmetry:{...(this.symmetry??defaultSymmetry())},hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,props:structuredClone(this.props??[]),...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
+    return {...(this.actors?{actors:this.actorList(),activeActor:this.activeActorId,actorTransform:this.actorTransform,actorEditable:this.actorEditable}:{}),motion:this.motion?.state(),appearance:this.appearance,ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),fixedContacts:(this.activeRig.supportContacts??this.activeRig.contacts).filter(end=>this.pins[end]).length,warning:this.warning,symmetry:{...(this.symmetry??defaultSymmetry())},hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,props:structuredClone(this.props??[]),...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
   }
 
   private update(fit:boolean){
@@ -1029,7 +1146,9 @@ export class PoseEngine {
 
   handWorld(side:Side){return handBones(side).map(name=>this.world(name));}
   worldPose(){this.model.updateWorldMatrix(true,true);return {body:this.cocoWorld(),Left:this.handWorld('Left'),Right:this.handWorld('Right')};}
-  skeletonData(){return this.activeRig.capabilities.openPose?worldSkeleton(this.worldPose()):this.genericSkeletonData();}
+  hasHumanActors(){return this.actors?[...this.actors.values()].some(a=>a.visible&&a.state.rigDefinition.capabilities.openPose):this.activeRig.capabilities.openPose;}
+  sceneJoints(camera?:THREE.Camera,width?:number,height?:number){this.stashActor();return {format:'momo-scene-skeleton',version:1,units:'metres',actors:[...(this.actors?.values()??[])].filter(a=>a.visible).map(a=>({id:a.id,name:a.name,...this.usingActor(a,()=>this.genericSkeletonData(camera,width,height))}))};}
+  skeletonData(){return (this.actors?.size??0)>1?this.sceneJoints():this.activeRig.capabilities.openPose?worldSkeleton(this.worldPose()):this.genericSkeletonData();}
   genericSkeletonData(camera?:THREE.Camera,width?:number,height?:number){
     this.model.updateMatrixWorld(true);camera?.updateMatrixWorld();
     return {format:'momo-skeleton',version:1,rig:this.activeRig.id,rigVersion:this.activeRig.version,units:'metres',...(camera&&width&&height?{imageSize:{width,height}}:{}),joints:Object.entries(this.bones).map(([name,bone])=>{
@@ -1039,16 +1158,25 @@ export class PoseEngine {
   }
   depthRange(cameras:THREE.Camera[]){this.model.updateWorldMatrix(true,true);return depthRangeFor(this.sceneBounds(),cameras);}
   openPose(camera:THREE.Camera,width:number,height:number,hideOccludedHands=true){
+    if(this.actors){this.stashActor();const frame:OpenPoseFrame={version:1.3,canvas_width:width,canvas_height:height,people:[]};for(const slot of this.actors.values())if(slot.visible&&slot.state.rigDefinition.capabilities.openPose){const actorFrame=this.usingActor(slot,()=>this.actorOpenPose(camera,width,height,hideOccludedHands));for(const p of actorFrame.people){p.person_id=[frame.people.length];Object.assign(p,{actor_id:slot.id});frame.people.push(p);}}return frame;}
+    return this.actorOpenPose(camera,width,height,hideOccludedHands);
+  }
+  private actorOpenPose(camera:THREE.Camera,width:number,height:number,hideOccludedHands=true){
     if(!this.activeRig.capabilities.openPose)throw new Error('此骨架没有人体 OpenPose 映射，请导出通用关节数据');
     camera.updateMatrixWorld();const pose=this.worldPose();if(!hideOccludedHands)return projectPose(pose,camera,width,height);
     const range=this.depthRange([camera]),pixels=this.renderPixels(camera,width,height,'visibility',false,range),visible=depthVisibility(pixels,camera,width,height,range);
     return projectPose(pose,camera,width,height,visible);
   }
 
-  renderImage(slot:ViewSlot,width:number,height:number,kind:RenderKind,transparent=false,viewCamera?:THREE.Camera,options?:{pose?:OpenPoseFrame;depthRange?:DepthRange;hideOccludedHands?:boolean}):HTMLCanvasElement{
+  renderImage(slot:ViewSlot,width:number,height:number,kind:RenderKind,transparent=false,viewCamera?:THREE.Camera,options?:{pose?:OpenPoseFrame;depthRange?:DepthRange;hideOccludedHands?:boolean;humanOnly?:boolean}):HTMLCanvasElement{
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d')!;
     const camera=viewCamera??this.viewCamera(slot,width/height);
     if(kind==='skeleton'||kind==='body-skeleton'){
+      if((this.actors?.size??0)>1){
+        const pose=options?.pose??this.openPose(camera,width,height,kind==='skeleton'&&(options?.hideOccludedHands??true));paintSkeleton(ctx,pose,kind==='skeleton');
+        if(kind==='skeleton'&&!options?.humanOnly)for(const slot of this.actors!.values())if(slot.visible&&!slot.state.rigDefinition.capabilities.openPose){const data=this.usingActor(slot,()=>this.genericSkeletonData(camera,width,height));this.paintGenericSkeleton(ctx,data,width);}
+        return canvas;
+      }
       if(!this.activeRig.capabilities.openPose){
         const data=this.genericSkeletonData(camera,width,height),points=new Map(data.joints.map(j=>[j.name,j]));ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.strokeStyle='#d8bb77';ctx.fillStyle='#d8bb77';ctx.lineWidth=Math.max(2,width/160);
         for(const joint of data.joints){const parent=joint.parent?points.get(joint.parent):undefined;if(parent?.valid&&joint.valid){ctx.beginPath();ctx.moveTo(...parent.image as [number,number]);ctx.lineTo(...joint.image as [number,number]);ctx.stroke();}if(joint.valid){ctx.beginPath();ctx.arc(...joint.image as [number,number],Math.max(3,width/180),0,Math.PI*2);ctx.fill();}}return canvas;
@@ -1059,7 +1187,9 @@ export class PoseEngine {
     const image=ctx.createImageData(width,height),row=width*4;for(let y=0;y<height;y++)image.data.set(pixels.subarray((height-y-1)*row,(height-y)*row),y*row);ctx.putImageData(image,0,0);return canvas;
   }
 
+  private paintGenericSkeleton(ctx:CanvasRenderingContext2D,data:ReturnType<PoseEngine['genericSkeletonData']>,width:number){const points=new Map(data.joints.map(j=>[j.name,j]));ctx.strokeStyle='#d8bb77';ctx.fillStyle='#d8bb77';ctx.lineWidth=Math.max(2,width/160);for(const j of data.joints){const p=j.parent?points.get(j.parent):undefined;if(p?.valid&&j.valid){ctx.beginPath();ctx.moveTo(...p.image as [number,number]);ctx.lineTo(...j.image as [number,number]);ctx.stroke();}if(j.valid){ctx.beginPath();ctx.arc(...j.image as [number,number],Math.max(3,width/180),0,Math.PI*2);ctx.fill();}}}
   private renderPixels(camera:THREE.Camera,width:number,height:number,kind:'surface'|DataKind,transparent=false,range:DepthRange={near:.01,far:10}){
+    this.stashActor();const actorVisibility=[...(this.actors?.values()??[])].flatMap(a=>[a.state.model,a.state.helpers,a.state.boneDisplay].map(object=>({object,visible:object.visible})));
     const prev={background:this.scene.background,override:this.scene.overrideMaterial,model:this.model.visible,helpers:this.helpers.visible,gizmo:this.transform.getHelper().visible,grid:this.grid.visible,ground:this.groundMesh.visible,bones:this.boneDisplay.visible,target:this.renderer.getRenderTarget(),alpha:this.renderer.getClearAlpha(),toneMapping:this.renderer.toneMapping};
     const data=kind!=='surface',material=data?dataMaterial(kind,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,range):null;
     const target=new THREE.WebGLRenderTarget(width,height,{samples:data?0:4});target.texture.colorSpace=data?THREE.NoColorSpace:THREE.SRGBColorSpace;
@@ -1068,10 +1198,12 @@ export class PoseEngine {
       if(debug)debug.onShaderError=(gl,program,vertex,fragment)=>{previousShaderError?.(gl,program,vertex,fragment);throw new Error('控制图着色器编译失败，请检查浏览器 WebGL 支持');};
       this.scene.background=data?new THREE.Color(0):transparent?null:new THREE.Color('#e7e8e5');this.scene.overrideMaterial=material;if(data)this.renderer.toneMapping=THREE.NoToneMapping;
       this.helpers.visible=false;this.transform.getHelper().visible=false;this.grid.visible=false;this.boneDisplay.visible=false;this.model.visible=true;this.groundMesh.visible=false;
+      for(const a of this.actors?.values()??[]){a.state.model.visible=a.visible;a.state.helpers.visible=false;a.state.boneDisplay.visible=false;}
       this.renderer.setClearAlpha(data?1:transparent?0:1);this.renderer.setRenderTarget(target);this.renderer.render(this.scene,camera);
       const buffer=new Uint8Array(width*height*4);this.renderer.readRenderTargetPixels(target,0,0,width,height,buffer);
       return buffer;
     }finally{
+      for(const {object,visible}of actorVisibility)object.visible=visible;
       this.scene.background=prev.background;this.scene.overrideMaterial=prev.override;this.model.visible=prev.model;this.helpers.visible=prev.helpers;this.transform.getHelper().visible=prev.gizmo;this.grid.visible=prev.grid;this.groundMesh.visible=prev.ground;this.boneDisplay.visible=prev.bones;this.renderer.setRenderTarget(prev.target);this.renderer.setClearAlpha(prev.alpha);this.renderer.toneMapping=prev.toneMapping;if(debug)debug.onShaderError=previousShaderError;target.dispose();material?.dispose();
     }
   }
@@ -1080,5 +1212,5 @@ export class PoseEngine {
   getThumbnails(){const {width,height}=this.cameraState.output,w=180,h=Math.round(w*height/width);return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,w,h,'surface').toDataURL('image/png')}));}
   resize(){if(this.dragBefore)this.interruptPoseDrag();const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{const half=(this.camera.top-this.camera.bottom)/2;this.camera.left=-half*w/h;this.camera.right=half*w/h;}this.camera.updateProjectionMatrix();}
   private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)&&now-this.motionNotify>100){this.motionNotify=now;this.update(false);}if(!this.fly.active)this.orbit.update();this.renderer.render(this.scene,this.camera);};
-  dispose(){if(this.disposed)return;this.disposed=true;cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
+  dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
 }

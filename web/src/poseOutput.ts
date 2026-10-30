@@ -41,11 +41,11 @@ function hueColor(hue:number){const h=hue*6,x=255*(1-Math.abs(h%2-1));const c=h<
 /** HAND21 edges and HSV edge colours follow ControlNet/OpenPose's convention.
  * Coordinates are already pixels, and c=0 is never drawn. */
 export function paintSkeleton(ctx:CanvasRenderingContext2D,frame:OpenPoseFrame,includeHands=true){
-  const {canvas_width:width,canvas_height:height}=frame,p=frame.people[0];ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.lineCap='round';
+  const {canvas_width:width,canvas_height:height}=frame;ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.lineCap='round';
   const draw=(k:number[],links:number[][],colors:string[],lineWidth:number,radius:number,jointColor?:string)=>{
     ctx.lineWidth=lineWidth;links.forEach(([a,b],i)=>{if(!k[a*3+2]||!k[b*3+2])return;ctx.strokeStyle=colors[i];ctx.beginPath();ctx.moveTo(k[a*3],k[a*3+1]);ctx.lineTo(k[b*3],k[b*3+1]);ctx.stroke();});
     for(let i=0;i<k.length/3;i++){if(!k[i*3+2])continue;ctx.fillStyle=jointColor??COCO_COLORS[i];ctx.beginPath();ctx.arc(k[i*3],k[i*3+1],radius,0,Math.PI*2);ctx.fill();}
   };
-  draw(p.pose_keypoints_2d,COCO_LINKS,COCO_COLORS,Math.max(2,height*.005),Math.max(2,height*.005));
-  if(includeHands)for(const hand of [p.hand_left_keypoints_2d,p.hand_right_keypoints_2d])draw(hand,HAND_LINKS,HAND_LINKS.map((_,i)=>hueColor(i/20)),Math.max(1,height/256),Math.max(1,height/128),'#0000ff');
+  for(const p of frame.people){draw(p.pose_keypoints_2d,COCO_LINKS,COCO_COLORS,Math.max(2,height*.005),Math.max(2,height*.005));
+  if(includeHands)for(const hand of [p.hand_left_keypoints_2d,p.hand_right_keypoints_2d])draw(hand,HAND_LINKS,HAND_LINKS.map((_,i)=>hueColor(i/20)),Math.max(1,height/256),Math.max(1,height/128),'#0000ff');}
 }

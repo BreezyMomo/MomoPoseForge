@@ -54,6 +54,7 @@ export const PART_NAMES:Record<string,string>={...BODY_PART_NAMES,...FINGER_PART
 export type FingerValues={curl:[number,number,number];spread:number};
 export type HandValues=Record<Digit,FingerValues>;
 export type EngineInfo = {
+  actors?:import('./sceneDocument').ActorSummary[];activeActor?:string;actorTransform?:boolean;actorEditable?:boolean;
   motion?:MotionState;appearance?:AppearanceRef;
   ready: boolean; view: string; navigating:boolean; selected: string; position: Vec3; rotation: Vec3;
   pinned: boolean; orientationPinned: boolean; ground: boolean; fullBody:boolean;fixedFeet:number;fixedContacts?:number;warning: string;

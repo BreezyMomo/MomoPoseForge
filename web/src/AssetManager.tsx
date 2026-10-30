@@ -18,8 +18,8 @@ export function AssetManager({engine,onClose,onBusy}:{engine:PoseEngine;onClose:
     setBusy(true);onBusy(true);setError('');try{
       // Validate a restored clip before making it visible in the library.
       const restored=change.deleted===false&&row.motion&&row.rig===engine.activeRig.id&&row.version===engine.activeRig.version?unpackMotionAsset({...row.motion,clips:row.motion.clips.filter(c=>c.uuid===row.id)},engine.activeRig,engine.rest):undefined;
-      if(row.character){await characterLibrary.edit(row.character.ref,change);if(row.rig===engine.activeRig.id&&change.name)engine.renameAppearance(row.id,change.name.trim());}
-      else if(row.motion){await motionLibrary.edit(row.motion.key,row.id,change);if(row.rig===engine.activeRig.id&&row.version===engine.activeRig.version){if(change.deleted)engine.removeMotion(row.id);else if(restored)engine.installImportedMotions(restored);if(change.name)engine.renameMotion(row.id,change.name.trim());}}
+      if(row.character){await characterLibrary.edit(row.character.ref,change);if(change.name)engine.renameAppearance(row.id,change.name.trim(),row.rig);}
+      else if(row.motion){await motionLibrary.edit(row.motion.key,row.id,change);if(change.deleted)engine.removeMotion(row.id);else if(change.deleted===false)engine.restoreMotionAsset({...row.motion,clips:row.motion.clips.filter(c=>c.uuid===row.id)});if(change.name)engine.renameMotion(row.id,change.name.trim());}
       setEditing('');await load();
     }catch(e){if(alive.current)setError((e as Error).message);}finally{if(alive.current){setBusy(false);onBusy(false);}}
   };

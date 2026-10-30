@@ -26,6 +26,20 @@
 .motion-panel .motion-import-button{margin:12px 0}
 .motion-transport{margin:12px 0 8px}
 .motion-seek{margin:6px 0 8px}
+.scene-actors{padding:14px 14px 12px;border-bottom:1px solid var(--border);font-size:11px;flex:none;min-width:0}
+.scene-actors-heading{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}.scene-actors h2{font-size:12px;font-weight:500;margin:0}.scene-actors-heading small{color:var(--faint);font-size:10px}
+.actor-list{max-height:170px;overflow:auto;scrollbar-width:thin}.actor-row{display:flex;align-items:center;gap:2px;border-radius:4px;margin-bottom:4px;padding:3px}.actor-row.selected{background:var(--raised)}
+.actor-select{min-width:0;flex:1;text-align:left;padding:4px!important}.actor-select span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.actor-select small{display:block;color:var(--faint);font-size:9px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actor-icon{width:25px;height:30px;display:flex;align-items:center;justify-content:center;flex:none;color:var(--muted)}
+.actor-add{display:flex;gap:6px;margin-top:9px}.actor-add select,.actor-rename input,.actor-placement input{min-width:0;background:var(--ground);border:1px solid var(--control);border-radius:4px;color:var(--text);font:inherit;padding:6px;box-sizing:border-box}.actor-add select{width:100%;flex:1}.actor-add>button{display:flex;align-items:center;justify-content:center;border:1px solid var(--control);border-radius:4px;width:30px}
+.actor-actions{display:flex;gap:9px;align-items:center;margin:7px 0}.actor-actions button{display:flex;align-items:center;justify-content:center;min-height:26px}.actor-actions>button:first-child{margin-right:auto;color:var(--muted);font-size:10px}
+.actor-rename{display:flex;gap:5px;margin:6px 0}.actor-rename input{width:100%}.actor-rename button{white-space:nowrap}
+.actor-edit-mode{display:flex;padding:3px;background:var(--ground);border-radius:4px;gap:3px}.actor-edit-mode button{flex:1;min-height:28px;font-size:10px}.actor-edit-mode button[aria-pressed=true]{background:var(--raised);border-radius:3px}
+.actor-placement>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:9px}.actor-placement label>span{display:block;color:var(--muted);font-size:9px;margin-bottom:4px}.actor-placement input{width:100%;padding:5px 3px;font-size:10px}.actor-placement .actor-yaw{display:flex;align-items:center;gap:7px;margin-top:8px}.actor-yaw>span:first-child{flex:1}.actor-yaw input{width:65px}
+.actor-readonly{font-size:10px;line-height:1.7;margin:8px 0 0;color:var(--muted)}.scene-actors button:disabled{opacity:.4}
+.scene-actors button:focus-visible,.scene-actors input:focus-visible,.scene-actors select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.actor-expand{display:flex;gap:5px;align-items:center;flex:1;min-width:0;text-align:left}.actor-expand small{margin-left:auto}.actor-quick-select{width:100%;min-width:0;padding:7px;background:var(--ground);color:var(--text);border:1px solid var(--control);border-radius:4px;font:inherit;margin-bottom:8px}
+.preset-panel .rig-selector{padding-top:10px}
 .asset-dialog{width:min(600px,calc(100vw - 24px));max-height:calc(100dvh - 32px);box-sizing:border-box;padding:24px;background:var(--surface);color:var(--text);border:1px solid var(--control);border-radius:8px;overflow:auto;--line:var(--border)}
 .asset-dialog::backdrop{background:rgb(0 0 0 / .55)}
 .asset-dialog h2{font-size:19px;margin:0}.asset-dialog h3{font-size:13px;font-weight:500;margin:20px 0 8px}
@@ -50,3 +64,4 @@
 .asset-dialog button:focus-visible,.asset-dialog input:focus-visible,.asset-dialog select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:500px){.asset-dialog{padding:18px;max-height:calc(100dvh - 24px)}.asset-filters{gap:12px}.asset-dialog .dialog-footer{gap:8px}.asset-note{font-size:10px}}
 @media(max-width:1100px){.topbar .top-actions .open-project,.topbar .top-actions .save-project{display:inline-flex;font-size:0;gap:0;padding:6px;min-width:28px}.topbar .top-actions{gap:5px}}
+@media(max-width:650px){.actor-quick-select{min-height:36px}.actor-edit-mode button{min-height:34px}.actor-icon{width:32px;height:36px}.actor-select{min-height:40px}.actor-add select,.actor-add>button{min-height:36px}}

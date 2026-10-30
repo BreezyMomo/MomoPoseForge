@@ -11,7 +11,7 @@ import {assetTransaction,assetsChanged} from './assetDatabase';
 
 export const MAX_PROJECT_BYTES=128*1024*1024;
 const ENTRY_LIMIT=32*1024*1024;
-type Entry={path:string;sha256:string;bytes:number};
+export type Entry={path:string;sha256:string;bytes:number};
 export type MotionBookmark={id?:string;builtinName?:string;time:number;speed:number;loop:boolean;inPlace:boolean};
 type Manifest={format:'momo-pose-forge-project';version:1;rig:string;rigVersion:number;project:Entry;appearance?:{ref:AppearanceRef;file:Entry};motions:Entry[];bookmark?:MotionBookmark};
 export type ProjectBundle={text:string;rig:RigDefinition;character?:CharacterAsset;motions:MotionAsset[];bookmark?:MotionBookmark};
@@ -34,25 +34,25 @@ export async function createProjectBundle(document:PoseDocument,rig:RigDefinitio
   return zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}});
 }
 /** Reject duplicate/path-rewritten entries and oversized expansion before JSZip allocates it. */
-function inspectZip(bytes:ArrayBuffer){
+export function inspectZip(bytes:ArrayBuffer,allowed=/^(manifest\.json|project\.json|character\.(glb|fbx)|motions\/\d+\.json)$/,maximumEntries=28){
   if(bytes.byteLength>MAX_PROJECT_BYTES||bytes.byteLength<22)throw new Error('完整工程包须在 128 MB 以内');
   const d=new DataView(bytes);let end=-1;
   for(let i=bytes.byteLength-22;i>=Math.max(0,bytes.byteLength-65557);i--)if(d.getUint32(i,true)===0x06054b50&&i+22+d.getUint16(i+20,true)===bytes.byteLength){end=i;break;}
   if(end<0||d.getUint16(end+4,true)||d.getUint16(end+6,true))throw new Error('工程 ZIP 结构无效');
   const count=d.getUint16(end+10,true),offset=d.getUint32(end+16,true),size=d.getUint32(end+12,true);
-  if(count<2||count>28||offset+size!==end||d.getUint16(end+8,true)!==count)throw new Error('工程 ZIP 目录无效');
+  if(count<2||count>maximumEntries||offset+size!==end||d.getUint16(end+8,true)!==count)throw new Error('工程 ZIP 目录无效');
   let p=offset,total=0;const names=new Set<string>();
   for(let i=0;i<count;i++){
     if(p+46>end||d.getUint32(p,true)!==0x02014b50||d.getUint16(p+8,true)&1)throw new Error('不支持加密或损坏的工程包');
     const n=d.getUint16(p+28,true),extra=d.getUint16(p+30,true),comment=d.getUint16(p+32,true),length=d.getUint32(p+24,true);
     if(p+46+n+extra+comment>end)throw new Error('工程目录越界');
     const name=new TextDecoder().decode(new Uint8Array(bytes,p+46,n));
-    if(!/^(manifest\.json|project\.json|character\.(glb|fbx)|motions\/\d+\.json)$/.test(name)||names.has(name))throw new Error('工程包含重复或未知文件');
+    if(!allowed.test(name)||names.has(name))throw new Error('工程包含重复或未知文件');
     names.add(name);total+=length;if(length>ENTRY_LIMIT||total>MAX_PROJECT_BYTES)throw new Error('工程解压大小超过限制');p+=46+n+extra+comment;
   }
   if(p!==end)throw new Error('工程目录长度无效');
 }
-async function readEntry(file:JSZip.JSZipObject,limit:number):Promise<ArrayBuffer>{
+export async function readEntry(file:JSZip.JSZipObject,limit:number):Promise<ArrayBuffer>{
   // JSZip exposes the browser stream at runtime, but omits it from JSZipObject's types.
   type Stream={on:(event:string,fn:(data:Uint8Array)=>void)=>Stream;resume:()=>void;pause:()=>void};
   const stream=(file as unknown as {internalStream:(type:string)=>Stream}).internalStream('uint8array');
