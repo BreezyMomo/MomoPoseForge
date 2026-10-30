@@ -16,7 +16,7 @@ export const DEFAULT_VIEWS: ViewSlot[] = [
   { id: 'high', name: '俯视', azimuth: 0, elevation: 45 },
   { id: 'low', name: '仰视', azimuth: 0, elevation: -30 },
 ];
-export type Pin = { position: Vec3; quaternion: Quat; orientation: boolean };
+export type Pin = { position: Vec3; quaternion: Quat; orientation: boolean; sole?:import('./footContacts').SoleContact };
 export type PoseDocument = {
   format: 'momo-pose-forge'; version: 1; rig: string; rigVersion?:number; ikVersion?:1; selection?:string; name: string;
   root: { position: Vec3; quaternion: Quat };
@@ -54,6 +54,7 @@ export const PART_NAMES:Record<string,string>={...BODY_PART_NAMES,...FINGER_PART
 export type FingerValues={curl:[number,number,number];spread:number};
 export type HandValues=Record<Digit,FingerValues>;
 export type EngineInfo = {
+  footContacts?:Record<string,{mode:import('./footContacts').FootContactMode;angle:number;heel:Vec3;ball:Vec3;error:number}>;
   actors?:import('./sceneDocument').ActorSummary[];activeActor?:string;actorTransform?:boolean;actorEditable?:boolean;
   motion?:MotionState;appearance?:AppearanceRef;
   ready: boolean; view: string; navigating:boolean; selected: string; position: Vec3; rotation: Vec3;

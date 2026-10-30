@@ -14,6 +14,7 @@ import {handShapeValid} from './handGestures';
 import {validSceneProps} from './sceneProps';
 import {validSymmetry} from './symmetry';
 import {validAppearance} from './characterAppearance';
+import {validSoleContact} from './footContacts';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -50,6 +51,7 @@ export function parseDocument(text:string,rest:PoseDocument,definition:RigDefini
   for(const name of Object.keys(rig.chains)){
     if(!vector(d.targets[name],3)||(!rig.ik||d.poles[name]!==undefined)&&!vector(d.poles[name],3))throw new Error('IK 控制点无效');
     const pin=d.pins[name];if(pin&&(!record(pin)||!vector(pin.position,3)||!quaternion(pin.quaternion)||typeof pin.orientation!=='boolean'))throw new Error('固定点数据无效');
+    if(pin?.sole!==undefined&&(!rig.soles?.[name]||!validSoleContact(pin.sole)||!pin.orientation))throw new Error('脚底接触数据无效或骨架不支持');
   }
   if(Object.keys(d.pins).some(k=>!rig.contacts.includes(k)))throw new Error('包含未知的固定部位');
   for(const map of [d.targets,d.poles])if(Object.keys(map).some(k=>!rig.chains[k]))throw new Error('包含未知的 IK 控制点');

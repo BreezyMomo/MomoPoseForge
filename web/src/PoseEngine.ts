@@ -30,6 +30,7 @@ import {characterLibrary} from './characterLibrary';
 import {parseMotionSource,checkMotionAbort,MAX_MOTION_BYTES} from './motionImport';
 import {retargetMixamoMotion} from './mixamoMotion';
 import {motionLibrary,packMotionAsset,unpackMotionAsset,type MotionAsset} from './motionLibrary';
+import {plantedFoot,solePoint,soleBall,type FootContactMode} from './footContacts';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 // These routines are the X Bot humanoid strategy. Generic FK rigs never enter them.
@@ -539,6 +540,7 @@ export class PoseEngine {
     this.polishContacts(contacts);
     const limited=this.keepContacts(joints,before,contacts,project);
     for(const end of END_EFFECTORS)this.setWorldQuaternion(this.bones[end],this.pins[end]?.orientation?new Q().fromArray(this.pins[end]!.quaternion):orientations[end]);
+    this.syncSoleOrientations();
     if(this.pins[active as Effector])this.pins[active as Effector]!.position=asVec(this.world(active));
     const error=this.world(active).distanceTo(target),fixedError=this.contactError(contacts);
     this.lastSolveStats={iterations,error,fixedError,milliseconds:performance.now()-started};
@@ -587,6 +589,47 @@ export class PoseEngine {
       this.solve(end,new V().fromArray(pin.position));
       if (pin.orientation) this.setWorldQuaternion(this.bones[end],new Q().fromArray(pin.quaternion));
     }
+    this.syncSoleOrientations();
+  }
+
+  private syncSoleOrientations(){
+    for(const [end,sole] of Object.entries(this.activeRig.soles??{}))if(this.pins[end]?.sole){
+      const pin=this.pins[end]!;this.setWorldQuaternion(this.bones[end],new Q().fromArray(pin.quaternion));
+      // The ball stays planted while the toe segment counter-rotates to lie flat.
+      const flat=new Q().fromArray(pin.quaternion).multiply(new Q().setFromAxisAngle(new V(1,0,0),-THREE.MathUtils.degToRad(pin.sole!.angle)));
+      this.setWorldQuaternion(this.bones[sole.toe],flat);
+    }
+  }
+  private supportedPart(name:string){return Object.entries(this.activeRig.soles??{}).find(([end,sole])=>(end===name||sole.toe===name)&&this.pins[end]?.sole)?.[0];}
+  private refuseSupportedEdit(name:string){
+    if(!this.supportedPart(name))return false;
+    this.warning='此脚正在支撑，请先切到自由模式，或用抬跟角度调整踮脚';this.update(false);return true;
+  }
+  footContactInfo():NonNullable<EngineInfo['footContacts']>{
+    const result:NonNullable<EngineInfo['footContacts']>={};
+    for(const [end,sole] of Object.entries(this.activeRig.soles??{})){
+      const pin=this.pins[end],contact=pin?.sole,position=asVec(this.world(end)),quaternion=this.bones[end].getWorldQuaternion(new Q()).toArray(),heel=solePoint(position,quaternion,sole.heel),ball=solePoint(position,quaternion,soleBall(sole,contact));
+      const orientationError=contact?this.bones[end].getWorldQuaternion(new Q()).angleTo(new Q().fromArray(pin!.quaternion))*.15:0;
+      const error=contact?Math.max(Math.abs(ball.y),contact.mode==='flat'?Math.abs(heel.y):Math.max(0,-heel.y),this.world(end).distanceTo(new V().fromArray(pin!.position)),orientationError):0;
+      result[end]={mode:contact?.mode??'free',angle:contact?.angle??35,heel:asVec(heel),ball:asVec(ball),error};
+    }return result;
+  }
+  setFootContact(end:string,mode:FootContactMode,angle=35){
+    const sole=this.activeRig.soles?.[end];if(!sole||!this.actorEditable||this.interactionBlocked||this.motion?.active||!['free','flat','ball'].includes(mode)||!Number.isFinite(angle))return;
+    this.interruptPoseDrag();const before=this.snapshot();this.warning='';
+    if(mode==='free'){if(this.pins[end]?.sole)delete this.pins[end];}
+    else{
+      const old=this.pins[end],position=old?.sole?old.position:asVec(this.world(end)),quaternion=old?.sole?old.quaternion:this.bones[end].getWorldQuaternion(new Q()).toArray();
+      const anchor=solePoint(position,quaternion,soleBall(sole,old?.sole));anchor.y=0;
+      const forward=new V(0,0,1).applyQuaternion(new Q().fromArray(quaternion)),heading=Math.atan2(forward.x,forward.z);
+      const pin=plantedFoot(sole,anchor,heading,{mode,angle:mode==='flat'?0:THREE.MathUtils.clamp(angle,0,45)});
+      this.pins[end]=pin;this.setWorldQuaternion(this.bones[end],new Q().fromArray(pin.quaternion));
+      this.solvePins();this.keepPinnedPose(before);this.syncSoleOrientations();
+      if(this.footContactInfo()[end].error>.002||this.contactError(this.fixedGoals())>.002){
+        this.restorePose(before);this.warning='脚底无法到达地面：请先调整骨盆或脚位，再启用支撑';this.syncGizmo();this.update(false);return;
+      }
+    }
+    this.syncTargets();this.syncGizmo();this.update(false);this.commit();
   }
 
   setSymmetry(group:SymmetryGroup,enabled:boolean){
@@ -634,6 +677,7 @@ export class PoseEngine {
     if(!this.actorEditable||this.interactionBlocked)return false;
     if(this.cancelPending&&this.dragBefore)return false;
     if(this.actorTransform){const baseline=this.dragBefore??this.snapshot(),next=relocatePose(baseline,{position:asVec(this.gizmo.position),quaternion:this.gizmo.quaternion.toArray()});if(next.root.position.some(n=>Math.abs(n)>10))return false;this.restorePose(next);this.update(false);return true;}
+    if(this.refuseSupportedEdit(this.selected))return false;
     if(!this.humanoid){
       if(this.dragBefore)this.restorePose(this.dragBefore);
       const bone=this.bones[this.selected];if(!bone)return false;
@@ -739,12 +783,13 @@ export class PoseEngine {
   setFullBody(value:boolean){if(!this.activeRig.capabilities.fullBodyIK)return;this.fullBody=value;this.update(false);this.commit();}
   setFeetPin(enabled:boolean){
     if(!this.rest||!this.activeRig.capabilities.pins)return;this.warning='';
-    for(const end of this.activeRig.supportContacts??this.activeRig.contacts){if(enabled)this.pins[end]={position:asVec(this.world(end)),quaternion:this.bones[end].getWorldQuaternion(new Q()).toArray(),orientation:this.activeRig.supportOrientation??false};else delete this.pins[end];}
+    for(const end of this.activeRig.supportContacts??this.activeRig.contacts){if(enabled){if(!this.pins[end]?.sole)this.pins[end]={position:asVec(this.world(end)),quaternion:this.bones[end].getWorldQuaternion(new Q()).toArray(),orientation:this.activeRig.supportOrientation??false};}else delete this.pins[end];}
     this.update(false);this.commit();
   }
   setPin(enabled:boolean,orientation=false){
     if(!this.activeRig.capabilities.pins)return;
     if(!this.activeRig.contacts.includes(this.selected))return;this.warning='';
+    if(enabled&&this.pins[this.selected]?.sole){this.warning='脚底支撑已固定位置和方向；切到自由模式可解除';this.update(false);return;}
     if(enabled)this.pins[this.selected as Effector]={position:asVec(this.world(this.selected)),quaternion:this.bones[this.selected].getWorldQuaternion(new Q()).toArray(),orientation};
     else delete this.pins[this.selected as Effector];
     this.update(false);this.commit();
@@ -759,6 +804,7 @@ export class PoseEngine {
   }
   setSelectedRotation(axis:number,value:number){
     if(!Number.isFinite(value)||!this.bones[this.selected]||!this.canRotateAxis(axis))return;
+    if(this.refuseSupportedEdit(this.selected))return;
     if(!this.humanoid){
       const baseline=this.snapshot();
       const bone=this.bones[this.selected],rest=this.restRotation(),angles=fkAngles(bone.quaternion,rest,this.rigJoint());angles[axis]=THREE.MathUtils.clamp(value,-180,180);
@@ -795,6 +841,7 @@ export class PoseEngine {
   }
   setToeBend(side:Side,value:number,commit=true){
     if(!this.bones[`${side}ToeBase`]||!Number.isFinite(value))return;const name=`${side}ToeBase`;
+    if(this.refuseSupportedEdit(name))return;
     const paired=this.pairedEdit(name,()=>{this.bones[name].quaternion.setFromAxisAngle(new V(1,0,0),THREE.MathUtils.degToRad(value));this.limitJoint(name);});
     if(paired!==null){if(paired){this.syncGizmo();if(commit)this.commit();}return;}
     this.bones[name].quaternion.setFromAxisAngle(new V(1,0,0),THREE.MathUtils.degToRad(value));this.limitJoint(name);this.update(false);this.syncGizmo();if(commit)this.commit();
@@ -818,7 +865,7 @@ export class PoseEngine {
     this.update(false);this.syncGizmo();this.commit();
   }
   copyHand(source:Side){const target=source==='Left'?'Right':'Left';this.applyHandGesture(target,this.captureHand(source),this.hands[source]);}
-  resetSelected(){const rest=this.rest.joints[this.selected];if(!rest)return;const paired=this.pairedEdit(this.selected,()=>{this.bones[this.selected].quaternion.fromArray(rest.quaternion);});if(paired!==null){if(paired){this.syncGizmo();this.commit();}return;}const baseline=this.snapshot();this.bones[this.selected].quaternion.fromArray(rest.quaternion);this.bones[this.selected].position.fromArray(rest.position);this.markCustomHand(this.selected);delete this.pins[this.selected as Effector];this.bones[this.selected].updateWorldMatrix(false,true);this.solvePins();this.keepPinnedPose(baseline);this.syncTargets();this.update(true);this.syncGizmo();this.commit();}
+  resetSelected(){const rest=this.rest.joints[this.selected];if(!rest||this.refuseSupportedEdit(this.selected))return;const paired=this.pairedEdit(this.selected,()=>{this.bones[this.selected].quaternion.fromArray(rest.quaternion);});if(paired!==null){if(paired){this.syncGizmo();this.commit();}return;}const baseline=this.snapshot();this.bones[this.selected].quaternion.fromArray(rest.quaternion);this.bones[this.selected].position.fromArray(rest.position);this.markCustomHand(this.selected);delete this.pins[this.selected as Effector];this.bones[this.selected].updateWorldMatrix(false,true);this.solvePins();this.keepPinnedPose(baseline);this.syncTargets();this.update(true);this.syncGizmo();this.commit();}
 
   applyPreset(preset:Preset,commit=true,scope:PresetScope='all'){
     if(!this.actorEditable)throw new Error('请先显示并解锁角色');
@@ -1040,13 +1087,20 @@ export class PoseEngine {
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
     const rotation=this.humanoid?[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3:fkAngles(bone?.quaternion??new Q(),this.restRotation(),this.rigJoint());
-    return {...(this.actors?{actors:this.actorList(),activeActor:this.activeActorId,actorTransform:this.actorTransform,actorEditable:this.actorEditable}:{}),motion:this.motion?.state(),appearance:this.appearance,ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),fixedContacts:(this.activeRig.supportContacts??this.activeRig.contacts).filter(end=>this.pins[end]).length,warning:this.warning,symmetry:{...(this.symmetry??defaultSymmetry())},hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,props:structuredClone(this.props??[]),...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
+    return {...(this.ready&&this.activeRig.soles?{footContacts:this.footContactInfo()}:{}),...(this.actors?{actors:this.actorList(),activeActor:this.activeActorId,actorTransform:this.actorTransform,actorEditable:this.actorEditable}:{}),motion:this.motion?.state(),appearance:this.appearance,ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),fixedContacts:(this.activeRig.supportContacts??this.activeRig.contacts).filter(end=>this.pins[end]).length,warning:this.warning,symmetry:{...(this.symmetry??defaultSymmetry())},hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,props:structuredClone(this.props??[]),...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
   }
 
   /** Helpers are separate scene objects, so restoring bones alone leaves stale hit targets. */
   private syncHandles(){
     if(!this.ready)return;this.model.updateWorldMatrix(true,true);
     for(const h of this.handles){const name=h.userData.part as string;const point=this.world(name);h.position.copy(h.parent?h.parent.worldToLocal(point):point);h.visible=!this.humanoid?(this.moreControls||name===this.activeRig.root||name===this.selected||this.effectors.includes(name)):(this.handDetail?!!fingerPart(name)&&name.startsWith(this.handDetail):!fingerPart(name)&&(this.moreControls||this.effectors.includes(name)));const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.4:1);}
+    if(!this.helpers)return;
+    const contacts=this.footContactInfo();
+    for(const [end,state] of Object.entries(contacts))for(const point of ['heel','ball'] as const){
+      const name=`sole-${end}-${point}`;let marker=this.helpers.getObjectByName(name) as THREE.Mesh|undefined;
+      if(!marker&&state.mode!=='free'){marker=new THREE.Mesh(new THREE.SphereGeometry(.009,10,6),new THREE.MeshBasicMaterial({depthTest:false}));marker.name=name;marker.renderOrder=20;this.helpers.add(marker);}
+      if(marker){marker.visible=state.mode!=='free'&&!this.handDetail;marker.position.copy(this.helpers.worldToLocal(new V().fromArray(state[point])));(marker.material as THREE.MeshBasicMaterial).color.set(state.error>.002?'#ed976c':point==='heel'&&state.mode==='ball'?'#a4abaa':'#8dd9b7');}
+    }
   }
 
   private update(fit:boolean){

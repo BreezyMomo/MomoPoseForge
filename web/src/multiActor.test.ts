@@ -35,6 +35,55 @@ function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreater
 function importedClip(e:PoseEngine){const root=e.rest.joints.Hips.position,id='c'.repeat(64),clip=new AnimationClip('Owned clip',1,[...Object.entries(e.rest.joints).map(([n,j])=>new QuaternionKeyframeTrack(`${n}.quaternion`,[0,1],[...j.quaternion,...j.quaternion])),new VectorKeyframeTrack('Hips.position',[0,1],[...root,...root])]);Object.assign(clip,{uuid:`${XBOT_RIG.id}@1:${id}:0:v1`});clip.userData={momoMotion:{assetId:id,fileName:'owned.fbx',format:'fbx',rig:XBOT_RIG.id,rigVersion:1,adapterVersion:1,sampleRate:30,root:'Hips',rootOrigin:root,mappedBones:20,ignoredTranslations:0,reference:'skin-bind'}};return clip;}
 
 describe('独立场景角色与原控制器',()=>{
+  it('平脚、前掌和自由模式接入真实骨骼；改变骨盆仍保持两处脚底支撑',()=>{
+    const e=withRealHandles(fixture());e.applyPreset(XBOT_RIG.presets.find(p=>p.id==='neutral')??XBOT_RIG.presets[0]);
+    e.setFootContact('LeftFoot','flat');e.setFootContact('RightFoot','ball',35);
+    let contacts=e.footContactInfo();expect(contacts.LeftFoot.mode).toBe('flat');expect(contacts.RightFoot.mode).toBe('ball');
+    expect(Math.abs(contacts.LeftFoot.heel[1])).toBeLessThan(.002);expect(Math.abs(contacts.LeftFoot.ball[1])).toBeLessThan(.002);
+    expect(contacts.RightFoot.heel[1]).toBeGreaterThan(.06);expect(Math.abs(contacts.RightFoot.ball[1])).toBeLessThan(.002);
+    const boneLengths=Object.fromEntries(Object.entries(e.bones).filter(([n])=>n!=='Hips').map(([n,b])=>[n,b.position.toArray()])),root=e.snapshot().root,pins=structuredClone(e.pins);
+    e.select('Hips');e.setSelectedPosition(1,e.world('Hips').y-.12);contacts=e.footContactInfo();
+    expect(contacts.LeftFoot.error).toBeLessThan(.002);expect(contacts.RightFoot.error).toBeLessThan(.002);expect(e.pins).toEqual(pins);expect(e.snapshot().root).toEqual(root);
+    for(const[n,p]of Object.entries(boneLengths))expect(e.bones[n].position.toArray()).toEqual(p);
+    for(const end of ['LeftFoot','RightFoot'])expect(e.bones[XBOT_RIG.soles![end].toe].getWorldQuaternion(new Quaternion()).angleTo(new Quaternion())).toBeLessThan(.001);
+    const before=e.snapshot();e.select('RightFoot');e.setSelectedPosition(0,.7);e.setSelectedRotation(0,15);e.setToeBend('Right',20);expect(e.snapshot().joints).toEqual(before.joints);expect(e.warning).toContain('自由');
+    e.setFootContact('RightFoot','free');expect(e.pins.RightFoot).toBeUndefined();expect(e.footContactInfo().LeftFoot.mode).toBe('flat');
+  });
+  it('抬跟角度绕前掌连续变化且不可达落地保留原姿势',()=>{
+    const e=fixture();e.setFootContact('LeftFoot','ball',15);const anchor=e.footContactInfo().LeftFoot.ball;
+    for(const angle of [25,35,45,20]){e.setFootContact('LeftFoot','ball',angle);const s=e.footContactInfo().LeftFoot;expect(s.mode).toBe('ball');expect(s.error).toBeLessThan(.002);expect(new Vector3().fromArray(s.ball).distanceTo(new Vector3().fromArray(anchor))).toBeLessThan(.002);}
+    e.setFootContact('LeftFoot','flat');expect(e.footContactInfo().LeftFoot.error).toBeLessThan(.002);
+    e.setFootContact('LeftFoot','free');e.moveActor([0,2,0],0);const before=e.snapshot();vi.mocked(e.onCommit).mockClear();e.setFootContact('LeftFoot','flat');expect(e.snapshot()).toEqual(before);expect(e.warning).toContain('无法到达');expect(e.onCommit).not.toHaveBeenCalled();
+  });
+  for(const name of ['深蹲','弓步','单膝跪'])it(`${name}按可达范围保持脚底接触或明确拒绝，不改变骨长`,()=>{
+    const e=fixture(),preset=XBOT_RIG.presets.find(p=>p.name===name)!;e.applyPreset(preset);e.setFootContact('LeftFoot','flat');
+    expect(e.footContactInfo().LeftFoot.mode).toBe('flat');e.select('Hips');e.setSelectedPosition(0,e.world('Hips').x+.02);expect(e.footContactInfo().LeftFoot.error).toBeLessThan(.002);
+    const before=e.snapshot();e.setSelectedPosition(1,2.5);expect(e.footContactInfo().LeftFoot.error).toBeLessThan(.002);for(const[n,b]of Object.entries(before.joints))if(n!=='Hips')expect(e.snapshot().joints[n].position).toEqual(b.position);
+  });
+  it('接触模式按实例及骨架独立，场景往返/切回/导出不丢失；旧工程仍兼容',async()=>{
+    const e=withRealHandles(fixture()),first=e.info().activeActor!;e.setFootContact('LeftFoot','flat');const firstPose=e.snapshot();
+    e.loadActorRuntime=vi.fn(async rig=>withRealHandles(fixture(rig,false)).captureActorRuntime());
+    await e.duplicateActor();const second=e.info().activeActor!;e.setFootContact('LeftFoot','ball',30);expect(actor(e,first).pose.pins).toEqual(firstPose.pins);
+    await e.addActor(FOX_RIG);const foxBefore=e.snapshot();e.setFootContact('LeftFoot','flat');expect(e.snapshot()).toEqual(foxBefore);expect(e.footContactInfo()).toEqual({});
+    const before=e.sceneSnapshot();await e.restoreScene(readSceneDocument(JSON.stringify(before)),{},false);expect(e.sceneSnapshot()).toEqual(before);
+    e.selectActor(first);expect(e.footContactInfo().LeftFoot.mode).toBe('flat');e.selectActor(second);expect(e.footContactInfo().LeftFoot.mode).toBe('ball');
+    const exported=e.sceneSnapshot();e.openPose(camera(),512,512,false);e.sceneJoints(camera(),512,512);expect(e.sceneSnapshot()).toEqual(exported);expectHandlesAligned(e);
+    const saved=e.snapshot();expect(parseDocument(JSON.stringify(saved),e.rest).pins).toEqual(saved.pins);
+    const others=e.sceneSnapshot().actors.filter(a=>a.id!==second);await e.replaceActorRig(FOX_RIG);expect(e.footContactInfo()).toEqual({});await e.replaceActorRig(XBOT_RIG);expect(e.snapshot().pins).toEqual(saved.pins);expect(e.sceneSnapshot().actors.filter(a=>a.id!==second)).toEqual(others);
+    const bad=structuredClone(saved);bad.pins.LeftFoot!.sole!.angle=70;expect(()=>parseDocument(JSON.stringify(bad),e.rest)).toThrow('脚底接触');
+    delete saved.pins.LeftFoot!.sole;expect(()=>parseDocument(JSON.stringify(saved),e.rest)).not.toThrow();
+  });
+  it('真实蒙皮脚底在平脚/踮脚下不穿地，全身联动和连续返回不积累接触漂移',()=>{
+    const e=fixture();e.ground=true;e.fullBody=true;
+    const samples:{mesh:Mesh;indices:number[]}[]=[];
+    e.model.traverse(o=>{if(!(o instanceof Mesh)||!('skeleton' in o))return;const mesh=o as import('three').SkinnedMesh;mesh.skeleton.update();const indices:number[]=[];for(let i=0;i<mesh.geometry.attributes.position.count;i++){const p=mesh.getVertexPosition(i,new Vector3()).applyMatrix4(mesh.matrixWorld);if(p.y<.008)indices.push(i);}if(indices.length)samples.push({mesh,indices});});
+    expect(samples.flatMap(s=>s.indices).length).toBeGreaterThan(100);
+    e.setFootContact('LeftFoot','flat');e.setFootContact('RightFoot','ball',35);
+    e.select('Hips');const baseline=e.snapshot(),origin=e.world('Hips').clone();
+    for(const delta of [[.03,-.08,0],[-.03,-.13,.03],[0,0,0]]){(e as any).dragBefore=baseline;e.gizmo.position.copy(origin).add(new Vector3().fromArray(delta));(e as any).manipulate();expect(e.footContactInfo().LeftFoot.error).toBeLessThan(.002);expect(e.footContactInfo().RightFoot.error).toBeLessThan(.002);}
+    (e as any).dragBefore=null;
+    for(const angle of [0,15,30,45,35]){e.setFootContact('RightFoot','ball',angle);expect(e.footContactInfo().RightFoot.angle).toBe(angle);for(const s of samples){const mesh=s.mesh as import('three').SkinnedMesh;mesh.skeleton.update();const min=Math.min(...s.indices.map(i=>mesh.getVertexPosition(i,new Vector3()).applyMatrix4(mesh.matrixWorld).y));expect(min,`angle ${angle}`).toBeGreaterThan(-.003);}}
+  });
   for(const rig of [XBOT_RIG,FOX_RIG])it(`${rig.id}采集预设缩略图及失败恢复后，真实控制点仍与关节世界位置一致`,()=>{
     const e=withRealHandles(fixture(rig));e.moveActor([1,.25,-.5],35);e.applyPreset(rig.presets[rig.presets.length-1]);const before=e.sceneSnapshot();expectHandlesAligned(e);
     e.renderImage=vi.fn(()=>({toDataURL:()=> 'preview'} as unknown as HTMLCanvasElement));e.presetThumbnails();expect(e.sceneSnapshot()).toEqual(before);expectHandlesAligned(e);

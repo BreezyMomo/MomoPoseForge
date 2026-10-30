@@ -18,15 +18,26 @@ export type RigDefinition={
   ik?:{solver:'constrained-fk';version:1};
   supportContacts?:readonly string[];
   supportOrientation?:boolean;
+  soles?:Readonly<Record<string,import('./footContacts').SoleDefinition>>;
   contacts:readonly string[];mirrorPairs:readonly (readonly [string,string])[];
   capabilities:{hands:boolean;fullBodyIK:boolean;pins:boolean;floor:boolean;mirror:boolean;openPose:boolean;partialPresets:boolean};
   presets:readonly Preset[];
 };
 
+// Supporting vertices measured on the original skinned foot's rounded sole.
+// Y offsets below are relative to each ankle; toe counter-rotation leaves this
+// rigid forefoot envelope unchanged. Other appearances may need new calibration.
+const xbotSole=(toe:string,height:number):import('./footContacts').SoleDefinition=>({toe,heel:[0,-height,-.035],ball:[0,-height,.10412190],ballHull:[
+  [0,-height,.10412190],[0,-height+.00035205,.10791812],[0,-height+.00122767,.11146923],
+  [0,-height+.00267313,.11491627],[0,-height+.00464669,.11809747],[0,-height+.00709986,.12093454],
+]});
 export const XBOT_RIG:RigDefinition={
   id:'mixamo-xbot-v2',version:1,name:'Mixamo X Bot',nameEn:'Mixamo X Bot',description:'完整人体 IK、手指与脚趾控制',descriptionEn:'Full human IK, fingers and toes',
   strategy:'xbot-humanoid',units:'metres',up:'+Y',forward:'+Z',root:'Hips',initialSelection:'LeftHand',
   motionImport:'mixamo-human-v1',
+  // X Bot v2 bind-surface sole (y=0), not the ankle joint's reference height.
+  // These points belong to this rig/mesh; other skeletons need their own calibration.
+  soles:{LeftFoot:xbotSole('LeftToeBase',.08235143),RightFoot:xbotSole('RightToeBase',.08235283)},
   asset:{kind:'gltf',url:'/models/xbot.glb',profileUrl:'/models/xbot-profile.json'},sourceUrl:'/models/XBOT-ASSET.md',license:'Adobe Mixamo terms',
   editableJoints:Object.keys(PART_NAMES),chains:{LeftHand:['LeftArm','LeftForeArm','LeftHand'],RightHand:['RightArm','RightForeArm','RightHand'],LeftFoot:['LeftUpLeg','LeftLeg','LeftFoot'],RightFoot:['RightUpLeg','RightLeg','RightFoot']},
   contacts:END_EFFECTORS,supportContacts:['LeftFoot','RightFoot'],supportOrientation:true,mirrorPairs:Object.keys(PART_NAMES).filter(n=>n.startsWith('Left')).map(n=>[n,n.replace('Left','Right')] as const),

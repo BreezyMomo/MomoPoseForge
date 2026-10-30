@@ -18,6 +18,7 @@ import {SceneActorsPanel} from './SceneActorsPanel';
 import {partName,presetName,presetDescription,categoryName,scopeName,scopeHelp,viewName,partControl,currentGestureName} from './productLabels';
 import {emptyHandValues} from './articulation';
 import {FineControls} from './FineControls';
+import {FootContactsPanel} from './FootContactsPanel';
 import type {RenderKind} from './renderPasses';
 import {CameraPanel,FrameControls} from './CameraPanel';
 import {defaultCameraSettings} from './cameraState';
@@ -276,6 +277,7 @@ export default function App(){
           {activeRig.capabilities.floor&&<label className="setting-row"><span>{t('pose.floor')}</span><input type="checkbox" role="switch" checked={info.ground} onChange={e=>engineRef.current?.setGround(e.target.checked)}/></label>}
           <label className="setting-row"><span>{t('pose.allControls')}</span><input type="checkbox" role="switch" checked={more} onChange={e=>{setMore(e.target.checked);engineRef.current?.setMore(e.target.checked);}}/></label><p className="field-help">{t(activeRig.ik?'pose.rigControlsHelp':'pose.allControlsHelp')}</p></section>}
 
+        <FootContactsPanel engine={engineRef.current} info={info}/>
         {activeRig.capabilities.hands&&<><section className="inspector-section"><div className="section-label"><h2>{t('pose.handPose')}</h2><Hand size={14}/></div>{(['Left','Right'] as const).map(side=><div className="hand-row" key={side}><span>{side==='Left'?t('pose.leftHand'):t('pose.rightHand')} · {currentGestureName(info.hands[side])}</span><button className="hand-library-entry" onClick={()=>{setHandSide(side);setInspectorTab('hands');}}>{t('pose.chooseGesture')}<ChevronRight size={13}/></button></div>)}</section>
         <FineControls engine={engineRef.current} info={info}/></>}
         </> }
