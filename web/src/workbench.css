@@ -1,0 +1,58 @@
+/* PoseForge supplies its brand and panel content; docking belongs to MomoWorkbench. */
+:root:not([data-appearance-theme]){--ui-bg:#141515;--ui-inset:#191a1a;--ui-panel:#1b1c1c;--ui-surface:#252727;--ui-hover:#303232;--ui-line:#303232;--ui-line-strong:#4a4d4b;--ui-text:#eeeeec;--ui-muted:#b4b7b4;--ui-selected:#393c39;--ui-shadow:#0006;--ui-window-radius:5px;--ui-control-radius:4px;--ui-tab-height:30px}
+:root[data-appearance-theme]{--ground:var(--ui-bg);--surface:var(--ui-panel);--raised:var(--ui-hover);--border:var(--ui-line);--control:var(--ui-line-strong);--text:var(--ui-text);--muted:var(--ui-muted);--faint:var(--ui-subtle);--accent:var(--ui-accent);color:var(--ui-text)}
+.pose-workbench{flex:1;min-height:0;min-width:0;padding:3px;background:var(--ground)}
+.pose-workbench-panel{height:100%;width:100%;min-width:0;min-height:0;overflow:hidden}
+.pose-workbench-panel>.preset-panel,.pose-workbench-panel>.stage-column,.pose-workbench-panel>.inspector-panel,.pose-workbench-panel>.views-strip{height:100%;width:100%;min-width:0;min-height:0;margin:0;border:0;position:static}
+.pose-workbench-panel>.preset-panel{display:flex;flex-direction:column;background:var(--ground)}
+.pose-workbench-panel>.inspector-panel{display:block;overflow-y:auto;background:var(--ground)}
+.pose-workbench-panel>.stage-column{display:flex;flex-direction:column;background:#202121}
+.pose-workbench .stage-wrap{min-height:0}
+.pose-workbench .stage-toolbar{flex-wrap:wrap;height:auto;min-height:43px;padding:6px 10px}
+.pose-workbench-panel>.views-strip{padding:12px 15px;overflow:auto;background:var(--ground)}
+.pose-workbench .views-grid{min-width:320px}
+.pose-workbench .view-image{height:auto;aspect-ratio:1.45;max-height:180px}
+.pose-workbench .view-label{left:16px;top:16px}
+.pose-workbench .stage-footnote{left:16px;right:16px;flex-wrap:wrap}
+.pose-workbench .dock-tab{font-family:inherit;font-size:11px;color:var(--muted)}
+.pose-workbench .dock-tab[aria-selected=true]{color:var(--text)}
+.pose-workbench .dock-stack-header{min-height:30px}
+.pose-workbench .inspector-title{top:0}.pose-workbench .inspector-tabs{top:59px}
+.workbench-menu-host{position:relative;font-size:12px;flex:none}
+.workbench-menu-host .header-dropdown>summary{list-style:none;cursor:pointer;padding:8px 5px;white-space:nowrap;color:var(--muted)}
+.workbench-menu-host .header-dropdown>summary::-webkit-details-marker{display:none}
+.workbench-menu-host .header-dropdown>summary::after{content:'⌄';margin-left:6px}
+.workbench-menu-host .header-dropdown-panel{position:absolute;top:36px;right:0;z-index:100;display:flex;flex-direction:column;gap:8px;width:285px;max-height:calc(100dvh - 90px);overflow:auto;padding:14px;background:var(--surface);border:1px solid var(--control);border-radius:5px;color:var(--text)}
+.workbench-menu-host button{text-align:left;font-size:12px;padding:5px 2px}
+.workbench-menu-host button:hover{background:var(--raised)}
+.workbench-menu-host hr{width:100%;height:1px;border:0;background:var(--border);margin:2px 0}
+.workbench-menu-host .dock-menu-tip{font-size:11px;color:var(--faint);line-height:1.6}
+.workbench-menu-host .dock-panel-toggles{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.workbench-menu-host .dock-panel-toggles label{display:flex;align-items:center;gap:5px}
+.workbench-menu-host .dock-save-form{display:flex;gap:5px;min-width:0}
+.workbench-menu-host .dock-save-form input{min-width:0;flex:1}
+.workbench-menu-host input,.workbench-menu-host select,.workbench-language select{height:30px;padding:4px 7px;border:1px solid var(--control);border-radius:4px;background:var(--ground);color:var(--text);font-size:11px}
+.workbench-menu-host .dock-saved-actions{display:flex;gap:15px}
+.workbench-language select{max-width:105px;cursor:pointer}
+.workbench-appearance-dialog{width:430px;max-height:calc(100dvh - 40px);background:var(--surface);border-color:var(--control);color:var(--text)}
+.workbench-appearance-dialog .dialog-header h2{font-size:18px}
+.workbench-appearance-dialog .dialog-header>button{font-size:24px;padding:0 4px}
+.workbench-appearance-body{margin:22px 0;display:flex;flex-direction:column;gap:18px}
+.workbench-appearance-body>label{display:grid;grid-template-columns:80px 1fr;align-items:center;font-size:12px;gap:18px}
+.workbench-appearance-body select{height:34px;padding:0 10px;border:1px solid var(--control);border-radius:4px;background:var(--ground);color:var(--text)}
+.workbench-appearance-dialog .dialog-footer{justify-content:flex-end;gap:15px}
+:root[data-appearance-theme] .app-shell,:root[data-appearance-theme] dialog{color:var(--text)}
+:root[data-appearance-theme] .stage-toolbar,:root[data-appearance-theme] .inspector-title,:root[data-appearance-theme] .inspector-tabs,:root[data-appearance-theme] .statusbar{background:var(--ground);border-color:var(--border);color:var(--muted)}
+:root[data-appearance-theme] .part-select select,:root[data-appearance-theme] .brand-light{color:var(--text)}
+:root[data-appearance-theme] option{background:var(--surface);color:var(--text)}
+:root[data-appearance-theme] .primary-button{background:var(--ui-text);color:var(--ui-bg)}
+:root[data-appearance-theme] .primary-button:hover:not(:disabled){background:var(--ui-muted)}
+:root[data-appearance-theme] .display-switch,:root[data-appearance-theme] .preset-tile.selected .preset-image{background:var(--raised)}
+:root[data-appearance-theme] .display-switch button.selected,:root[data-appearance-theme] .icon-button.active{background:var(--ui-selected);color:var(--text)}
+:root[data-appearance-theme] .preset-tile>span,:root[data-appearance-theme] .text-button:hover,:root[data-appearance-theme] .view-caption>button:hover{color:var(--text)}
+:root[data-density=comfortable] .pose-workbench .inspector-section{padding-top:24px;padding-bottom:26px}
+:root[data-density=comfortable] .pose-workbench .dock-stack-header{height:36px}
+.app-shell .top-actions{gap:11px}
+@media(max-width:1250px){.app-shell .topbar{gap:14px;padding:0 16px}.app-shell .project-meta input{width:110px}.app-shell .save-status{display:none}.app-shell .top-actions{gap:8px}.app-shell .history-actions{padding-right:7px}.workbench-language select{max-width:90px}}
+@media(max-width:900px){.app-shell .topbar{height:auto;min-height:60px;flex-wrap:wrap;padding:10px 14px;gap:8px 12px}.app-shell .project-meta{margin-left:auto;flex:0;min-width:100px}.app-shell .top-actions{width:100%;justify-content:flex-end}.app-shell .history-actions{margin-right:auto}.app-shell .mobile-tools{display:flex}.pose-workbench-panel>.preset-panel,.pose-workbench-panel>.inspector-panel{position:static!important;inset:auto;max-width:none;display:flex;flex-direction:column}.pose-workbench-panel>.inspector-panel{display:block}.pose-workbench .views-grid{min-width:310px}.workbench-menu-host .header-dropdown-panel{right:auto;left:-40px}.app-shell .statusbar>span:last-child{display:none}}
+@media(max-width:450px){.app-shell .top-actions{gap:5px}.app-shell .top-actions .text-button{font-size:11px}.app-shell .primary-button{padding:0 11px}.app-shell .history-actions{display:none}.workbench-language select{max-width:83px}.app-shell .brand{font-size:14px}.pose-workbench .stage-footnote>span:last-child{display:none}.workbench-menu-host .header-dropdown-panel{left:0}}

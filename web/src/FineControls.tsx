@@ -1,3 +1,5 @@
+import {digitName} from './productLabels';
+import {t} from './workbenchState';
 import {useEffect,useRef} from 'react';
 import type {PoseEngine} from './PoseEngine';
 import {DIGITS,DIGIT_NAMES,type Digit,type EngineInfo,type Side} from './types';
@@ -12,21 +14,21 @@ function JointSlider({label,value,min,max,disabled=false,onPreview,onCommit}:{la
 
 export function FineControls({engine,info}:{engine:PoseEngine|null;info:EngineInfo}){
   const side=info.handDetail,selected=fingerPart(info.selected),digit=(selected?.[2]??'Index') as Digit;
-  const sideName=side==='Left'?'左手':'右手';
+  const sideName=side==='Left'?t('pose.leftHand'):t('pose.rightHand');
   const open=(next:Side)=>{if(side===next){engine?.focus();return;}engine?.setHandDetail(next);engine?.focusHand(next);};
   const commit=()=>engine?.commit();
   return <>
-    <section className="inspector-section fine-controls"><div className="section-label"><h2>手指精调</h2><span>逐节控制</span></div>
-      <div className="fine-tabs"><button disabled={!info.ready} aria-pressed={side==='Left'} onClick={()=>open('Left')}>左手精调</button><button disabled={!info.ready} aria-pressed={side==='Right'} onClick={()=>open('Right')}>右手精调</button></div>
+    <section className="inspector-section fine-controls"><div className="section-label"><h2>{t('pose.fingerControls')}</h2><span>{t('pose.eachJoint')}</span></div>
+      <div className="fine-tabs"><button disabled={!info.ready} aria-pressed={side==='Left'} onClick={()=>open('Left')}>{t('pose.leftHandControls')}</button><button disabled={!info.ready} aria-pressed={side==='Right'} onClick={()=>open('Right')}>{t('pose.rightHandControls')}</button></div>
       {side?<>
-        <button className="fine-close" onClick={()=>engine?.focus()}>返回全身</button>
-        <div className="fine-select"><label>手指<select aria-label="选择手指" value={digit} onChange={e=>engine?.select(`${side}${e.target.value}1`)}>{DIGITS.map(d=><option key={d} value={d}>{DIGIT_NAMES[d]}</option>)}</select></label><button onClick={()=>engine?.focusHand(side)}>聚焦手部</button></div>
-        <div className="fine-joints">{[1,2,3].map(joint=><button key={joint} aria-pressed={info.selected===`${side}${digit}${joint}`} onClick={()=>engine?.select(`${side}${digit}${joint}`)}>第 {joint} 节</button>)}</div>
-        {[1,2,3].map(joint=><JointSlider key={`${side}${digit}${joint}`} label={`${sideName}${DIGIT_NAMES[digit]}第 ${joint} 节弯曲`} value={info.fingers[side][digit].curl[joint-1]} min={-10} max={FINGER_CURL_LIMITS[digit][joint-1]} onPreview={v=>engine?.setFinger(side,digit,joint,v,'curl',false)} onCommit={commit}/>)}
-        <JointSlider label={`${sideName}${DIGIT_NAMES[digit]}张开`} value={info.fingers[side][digit].spread} min={digit==='Thumb'?-40:-20} max={digit==='Thumb'?40:20} onPreview={v=>engine?.setFinger(side,digit,1,v,'spread',false)} onCommit={commit}/>
-      </>:<p className="field-help">选择一只手进入近景，调整每节指骨和手指张开角度。</p>}
+        <button className="fine-close" onClick={()=>engine?.focus()}>{t('pose.fullBody')}</button>
+        <div className="fine-select"><label>{t('pose.finger')}<select aria-label={t('pose.chooseFinger')} value={digit} onChange={e=>engine?.select(`${side}${e.target.value}1`)}>{DIGITS.map(d=><option key={d} value={d}>{digitName(d)}</option>)}</select></label><button onClick={()=>engine?.focusHand(side)}>{t('pose.focusHand')}</button></div>
+        <div className="fine-joints">{[1,2,3].map(joint=><button key={joint} aria-pressed={info.selected===`${side}${digit}${joint}`} onClick={()=>engine?.select(`${side}${digit}${joint}`)}>{t('pose.joint',joint)}</button>)}</div>
+        {[1,2,3].map(joint=><JointSlider key={`${side}${digit}${joint}`} label={t('pose.fingerBend',sideName,digitName(digit),joint)} value={info.fingers[side][digit].curl[joint-1]} min={-10} max={FINGER_CURL_LIMITS[digit][joint-1]} onPreview={v=>engine?.setFinger(side,digit,joint,v,'curl',false)} onCommit={commit}/>)}
+        <JointSlider label={t('pose.fingerSpread',sideName,digitName(digit))} value={info.fingers[side][digit].spread} min={digit==='Thumb'?-40:-20} max={digit==='Thumb'?40:20} onPreview={v=>engine?.setFinger(side,digit,1,v,'spread',false)} onCommit={commit}/>
+      </>:<p className="field-help">{t('pose.fingersIntro')}</p>}
     </section>
-    <section className="inspector-section fine-controls"><div className="section-label"><h2>前臂翻转</h2><span>保留弯肘</span></div><p className="field-help">沿前臂轴翻转手掌，不改变手腕位置。</p>{(['Left','Right'] as const).map(s=><JointSlider key={s} disabled={!info.ready} label={`${s==='Left'?'左':'右'}前臂翻转`} value={info.forearmTwist[s]} min={-90} max={90} onPreview={v=>engine?.setForearmTwist(s,v,false)} onCommit={commit}/>)}</section>
-    <section className="inspector-section fine-controls"><div className="section-label"><h2>脚趾控制</h2><span>前脚掌弯曲</span></div>{(['Left','Right'] as const).map(s=><JointSlider key={s} disabled={!info.ready} label={`${s==='Left'?'左':'右'}脚趾弯曲`} value={info.toes[s]} min={-45} max={65} onPreview={v=>engine?.setToeBend(s,v,false)} onCommit={commit}/>)}</section>
+    <section className="inspector-section fine-controls"><div className="section-label"><h2>{t('pose.forearmRoll')}</h2><span>{t('pose.keepElbow')}</span></div><p className="field-help">{t('pose.rollHelp')}</p>{(['Left','Right'] as const).map(s=><JointSlider key={s} disabled={!info.ready} label={t('pose.forearmSide',t(s==='Left'?'pose.left':'pose.right'))} value={info.forearmTwist[s]} min={-90} max={90} onPreview={v=>engine?.setForearmTwist(s,v,false)} onCommit={commit}/>)}</section>
+    <section className="inspector-section fine-controls"><div className="section-label"><h2>{t('pose.toeControls')}</h2><span>{t('pose.forefootBend')}</span></div>{(['Left','Right'] as const).map(s=><JointSlider key={s} disabled={!info.ready} label={t('pose.toeSide',t(s==='Left'?'pose.left':'pose.right'))} value={info.toes[s]} min={-45} max={65} onPreview={v=>engine?.setToeBend(s,v,false)} onCommit={commit}/>)}</section>
   </>;
 }
