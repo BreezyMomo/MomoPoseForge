@@ -1,0 +1,28 @@
+.character-field{display:flex;flex-direction:column;gap:9px;font-size:12px;margin:18px 0;color:var(--muted)}
+.character-field select{width:100%;min-width:0;padding:8px 10px;border:1px solid var(--control);border-radius:4px;background:var(--raised);color:var(--text);font:inherit}
+.character-action{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;border:1px solid var(--control);padding:9px 8px;border-radius:4px;font-size:12px;margin:10px 0;min-height:36px}
+.character-panel .field-help,.motion-panel .field-help{margin-top:16px;line-height:1.85}
+.motion-panel{padding:0 18px 18px;overflow:auto;min-height:0;flex:1;container-type:inline-size}
+.motion-panel h3{font-size:13px;font-weight:500;margin-top:23px}
+.motion-meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px 10px;font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+.motion-transport{display:flex;gap:8px;margin:20px 0 12px}
+.motion-transport button{min-height:36px;min-width:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--control);border-radius:4px;padding:7px 6px;gap:6px}
+.motion-play{flex:1}
+.motion-seek{width:100%;accent-color:var(--accent);margin:10px 0 14px}
+.inspector-tabs{gap:15px;overflow-x:auto;scrollbar-width:thin}
+.inspector-tabs button{white-space:nowrap;flex:none}
+.preview-notice{font-size:12px;line-height:1.8;color:var(--muted);margin:15px 18px}
+.inspector-pose-fields{border:0;margin:0;padding:0;min-width:0}
+.motion-panel .character-action{white-space:normal;line-height:1.5}
+.preset-panel .panel-tabs{gap:10px;padding-left:14px;padding-right:14px}
+.preset-panel .panel-tabs button{flex:1 1 auto;min-width:0;padding-left:0;padding-right:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preset-panel .panel-tabs button.selected{flex-shrink:0}
+@container(max-width:180px){.motion-play span{display:none}.motion-transport{gap:5px}}
+.motion-import-button{margin-top:18px}.motion-source-note{font-size:11px!important;margin-top:5px!important}
+
+.motion-panel .character-field{margin:12px 0;gap:6px}
+.motion-panel .motion-clip-field{gap:0}
+.motion-panel .character-action{padding:7px 6px;min-height:32px;margin:8px 0}
+.motion-panel .motion-import-button{margin:12px 0}
+.motion-transport{margin:12px 0 8px}
+.motion-seek{margin:6px 0 8px}

@@ -13,6 +13,7 @@ import {validateReferenceImage} from './referenceImage';
 import {handShapeValid} from './handGestures';
 import {validSceneProps} from './sceneProps';
 import {validSymmetry} from './symmetry';
+import {validAppearance} from './characterAppearance';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -60,6 +61,7 @@ export function parseDocument(text:string,rest:PoseDocument,definition:RigDefini
   if(d.camera!==undefined&&!validateCameraSettings(d.camera))throw new Error('相机书签、画幅或构图设置无效');
   if(d.referenceImage!==undefined&&!validateReferenceImage(d.referenceImage))throw new Error('参考图片或放置设置无效，当前工程未改变');
   if(d.props!==undefined&&!validSceneProps(d.props))throw new Error('场景道具数据无效，当前工程未改变');
+  if(d.appearance!==undefined&&!validAppearance(d.appearance,rig))throw new Error('角色外观与当前骨架不兼容');
   return structuredClone(d);
 }
 
@@ -70,8 +72,10 @@ const toBlob=(c:HTMLCanvasElement)=>new Promise<Blob>((resolve,reject)=>c.toBlob
 export type ExportOptions={scope:'five'|'current';surface:boolean;skeleton:boolean;keypoints:boolean;depth:boolean;normal:boolean;sheet:boolean;project:boolean;resolution?:768|1536;width?:number;height?:number;transparent:boolean;hideOccludedHands:boolean};
 
 export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:AbortSignal,onProgress:(label:string)=>void){
+  if(engine.motion?.active)throw new Error('请先取姿或返回原姿势，再导出');
   engine.fly?.stop();
   const rig=engine.activeRig,human=rig.capabilities.openPose;
+  const appearance=engine.appearance,customAppearance=!!appearance&&!rig.appearances?.some(a=>a.id===appearance.id);
   const doc=engine.snapshot(),output=engine.getCameraSettings().output,w=options.width??options.resolution??output.width,h=options.height??(options.resolution?options.resolution*4/3:output.height);
   if(!validOutputSize(w,h))throw new Error('图片宽高须为 256 至 2048 的整数');
   const slots:ViewSlot[]=options.scope==='five'?structuredClone(engine.views):[(()=>{const d=engine.camera.position.clone().sub(engine.orbit.target).normalize();return{id:'current',name:'当前视角',azimuth:Math.atan2(d.x,d.z)*180/Math.PI,elevation:Math.asin(d.y)*180/Math.PI};})()];
@@ -116,7 +120,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       const recipe=controlnetRecipe(slots.map(s=>s.id),options,options.scope==='current'&&engine.handDetail?{side:engine.handDetail,shape:engine.hands[engine.handDetail]}:undefined,{width:w,height:h});
       zip.file('workflow-controlnet.json',JSON.stringify(recipe,null,2));zip.file('tools/run-controlnet.py',runnerSource);zip.file('tools/requirements-controlnet.txt',requirementsSource);zip.file('workflows/controlnet-models.json',JSON.stringify(recipe.models,null,2));
     }
-    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.6.0',exportVersion:2,projectVersion:1,sceneProps:{count:doc.props?.length??0,visible:doc.props?.filter(p=>p.visible).length??0,renderedIn:['surface','depth','normal','mask'],skeleton:'active rig only'},referenceImage:{rendered:false,embeddedInProject:!!doc.referenceImage&&options.project},rig:doc.rig,rigVersion:rig.version,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:human?'OpenPose COCO18 + 2 x HAND21':'momo-skeleton v1',pointOrder:human?{body:BODY_NAMES,hand:HAND_NAMES}:{joints:Object.keys(engine.bones)},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:human?{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}}:{joints:'retain valid occluded joints',projectionValidity:'explicit valid boolean; no human hand filtering'},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:rig.name,modelLicense:rig.license,...(rig.attribution?{modelAttribution:rig.attribution}:{})},null,2));
+    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.6.0',exportVersion:2,projectVersion:1,sceneProps:{count:doc.props?.length??0,visible:doc.props?.filter(p=>p.visible).length??0,renderedIn:['surface','depth','normal','mask'],skeleton:'active rig only'},referenceImage:{rendered:false,embeddedInProject:!!doc.referenceImage&&options.project},rig:doc.rig,rigVersion:rig.version,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:human?'OpenPose COCO18 + 2 x HAND21':'momo-skeleton v1',pointOrder:human?{body:BODY_NAMES,hand:HAND_NAMES}:{joints:Object.keys(engine.bones)},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:human?{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}}:{joints:'retain valid occluded joints',projectionValidity:'explicit valid boolean; no human hand filtering'},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:appearance?.name??rig.name,appearance:appearance?{...appearance,source:customAppearance?'local user GLB':'bundled',embeddedInProject:false}:null,modelLicense:customAppearance?'Local source asset':rig.license,...(rig.attribution?{rigAttribution:rig.attribution,...(!customAppearance?{modelAttribution:rig.attribution}:{})}:{})},null,2));
     zip.file('README.txt',human?[
       'MomoPoseForge 姿态导出 v2','',
       '每个视角：mannequin.png 是素体参考；openpose-body-hands.png 是身体 COCO18 + 双手各21点的黑底骨架控制图。',
@@ -140,7 +144,8 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       'mannequin.png 为素体图；depth.png 为近白远黑线性深度；normal.png 为相机空间表面法线；mask.png 白色为前景。',
       '参考图不进入渲染；工程内可内嵌参考图。project.pose.json 可重新打开编辑。',
     ].join('\n'));
-    if(rig.attribution)zip.file('ASSET-CREDITS.txt',[rig.name,rig.attribution.authors,`Source: ${rig.attribution.source}`,`License: ${rig.license}`,rig.attribution.licenseUrl,`Changes: ${rig.attribution.changes}`].join('\n'));
+    if(rig.attribution)zip.file('ASSET-CREDITS.txt',[(customAppearance?'Rig reference: ':'')+rig.name,rig.attribution.authors,`Source: ${rig.attribution.source}`,`License: ${rig.license}`,rig.attribution.licenseUrl,`Changes: ${rig.attribution.changes}`].join('\n'));
+    if(appearance)zip.file('CHARACTER.txt',[appearance.name,`SHA-256: ${appearance.id}`,customAppearance?'Appearance source: local GLB supplied by the user.':'Appearance source: bundled Fox with a geometric scarf by MomoPoseForge.',customAppearance?'Asset attribution was not supplied with this local file.':'Original Fox attribution: see ASSET-CREDITS.txt.','The character GLB is not embedded in the project JSON. Re-import the same source file on another device.'].join('\n'));
     onProgress('正在打包文件');check();const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},()=>check());check();download(blob,`${safeName(doc.name)}.zip`);
   }finally{
     // Rendering does not edit the pose. Re-applying an unchanged snapshot would

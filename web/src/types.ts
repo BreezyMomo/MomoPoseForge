@@ -4,6 +4,8 @@ import type {CameraSettings} from './cameraState';
 import type {ReferenceImage} from './referenceImage';
 import type {SymmetrySettings} from './symmetry';
 import type {SceneProp} from './sceneProps';
+import type {AppearanceRef} from './characterAppearance';
+import type {MotionState} from './motionPreview';
 export const END_EFFECTORS = ['LeftHand', 'RightHand', 'LeftFoot', 'RightFoot'] as const;
 export type Effector = typeof END_EFFECTORS[number];
 export type ViewSlot = { id: string; name: string; azimuth: number; elevation: number };
@@ -26,6 +28,7 @@ export type PoseDocument = {
   referenceImage?:ReferenceImage;
   props?:SceneProp[];
   symmetry?:SymmetrySettings;
+  appearance?:AppearanceRef;
 };
 export type Preset = {
   id: string; name: string; category: string; description: string;
@@ -51,6 +54,7 @@ export const PART_NAMES:Record<string,string>={...BODY_PART_NAMES,...FINGER_PART
 export type FingerValues={curl:[number,number,number];spread:number};
 export type HandValues=Record<Digit,FingerValues>;
 export type EngineInfo = {
+  motion?:MotionState;appearance?:AppearanceRef;
   ready: boolean; view: string; navigating:boolean; selected: string; position: Vec3; rotation: Vec3;
   pinned: boolean; orientationPinned: boolean; ground: boolean; fullBody:boolean;fixedFeet:number;fixedContacts?:number;warning: string;
   hands: { Left: string; Right: string }; boneCount: number; vertexCount: number;

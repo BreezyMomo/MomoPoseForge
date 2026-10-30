@@ -1,4 +1,5 @@
 import type {RigDefinition,RigJointControl} from './rigs';
+import {FOX_SCARF_ID} from './foxScarfAsset';
 import type {Vec3} from './types';
 
 const control=(name:string,label:string,labelEn:string,min:Vec3,max:Vec3,hinge?:0|1|2):RigJointControl=>({name,label,labelEn,limits:[min,max],...(hinge===undefined?{}:{hinge})});
@@ -30,6 +31,7 @@ export const FOX_RIG:RigDefinition={
   id:'khronos-fox',version:1,name:'小狐狸 · IK / FK',nameEn:'Fox · IK / FK',description:'拖动四爪、固定支撑 · 头颈与尾巴旋转',descriptionEn:'Drag paws, pin contacts, rotate the head and tail',
   strategy:'articulated',units:'metres',up:'+Y',forward:'+Z',root:'b_Hip_01',initialSelection:'b_LeftHand_011',
   asset:{kind:'gltf',url:'/models/fox/fox.glb',profileUrl:'/models/fox/fox-profile.json'},sourceUrl:'/models/fox/FOX-ASSET.md',license:'CC0 model; CC-BY-4.0 rig, animation and glTF conversion',
+  appearances:[{id:FOX_SCARF_ID,name:'围巾狐狸',nameEn:'Fox with scarf',url:'/models/fox/fox-scarf.glb'}],
   attribution:{authors:'PixelMannen (model); tomkranis (rigging and animation); AsoboStudio and scurest (glTF conversion)',source:'https://github.com/KhronosGroup/glTF-Sample-Assets/tree/4995a638c96dbc94376d3d6164e70fee3ac7f7a2/Models/Fox',licenseUrl:'https://creativecommons.org/licenses/by/4.0/',changes:'Source coordinates, skin inverse bind translations and animation translations scaled by 0.01 for metre-based editing by MomoPoseForge. Exported images may show edited joint poses.'},
   editableJoints:controls.map(c=>c.name),jointControls:controls,ik:{solver:'constrained-fk',version:1},chains:{
     b_LeftHand_011:['b_LeftUpperArm_09','b_LeftForeArm_010','b_LeftHand_011'],

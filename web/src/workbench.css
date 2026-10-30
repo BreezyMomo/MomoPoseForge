@@ -6,6 +6,7 @@
 .pose-workbench-panel>.preset-panel,.pose-workbench-panel>.stage-column,.pose-workbench-panel>.inspector-panel,.pose-workbench-panel>.views-strip{height:100%;width:100%;min-width:0;min-height:0;margin:0;border:0;position:static}
 .pose-workbench-panel>.preset-panel{display:flex;flex-direction:column;background:var(--ground)}
 .pose-workbench-panel>.inspector-panel{display:block;overflow-y:auto;background:var(--ground)}
+.pose-workbench-panel>.preset-panel.mobile-open,.pose-workbench-panel>.inspector-panel.mobile-open{width:100%}
 .pose-workbench-panel>.stage-column{display:flex;flex-direction:column;background:#202121}
 .pose-workbench .stage-wrap{min-height:0}
 .pose-workbench .stage-toolbar{flex-wrap:wrap;height:auto;min-height:43px;padding:6px 10px}

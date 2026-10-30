@@ -1,10 +1,17 @@
-import {Bone,Group,Mesh,SkinnedMesh,DirectionalLight,SpotLight,PointLight,MeshStandardMaterial,SphereGeometry,CylinderGeometry,Vector3,type Object3D} from 'three';
+import {Bone,Box3,Group,Mesh,SkinnedMesh,DirectionalLight,SpotLight,PointLight,MeshStandardMaterial,SphereGeometry,CylinderGeometry,Vector3,type Object3D} from 'three';
 import type {RigDefinition} from './rigs';
 
 /** Some glTF assets rely on derivative flat shading and omit vertex normals. */
 export function ensureRigNormals(root:Object3D){
   const processed=new Set<import('three').BufferGeometry>();
   root.traverse(object=>{if(object instanceof Mesh&&!processed.has(object.geometry)){processed.add(object.geometry);if(object.geometry.getAttribute('position')&&!object.geometry.getAttribute('normal'))object.geometry.computeVertexNormals();}});
+}
+
+/** Ignore cached/inactive appearances, even while the viewport shows skeleton lines. */
+export function visibleSurfaceBounds(root:Object3D){
+  const box=new Box3();root.updateWorldMatrix(true,true);
+  const visit=(object:Object3D)=>{if(!object.visible)return;if(object instanceof Mesh)box.union(new Box3().setFromObject(object,true));else object.children.forEach(visit);};
+  root.children.forEach(visit);return box;
 }
 
 /** Builds a real bone hierarchy; each rigid surface follows its owning joint. */

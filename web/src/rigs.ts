@@ -10,6 +10,8 @@ export type RigDefinition={
   strategy:'xbot-humanoid'|'fk'|'articulated';units:'metres';up:'+Y';forward:'+Z';root:string;initialSelection:string;
   asset:{kind:'gltf';url:string;profileUrl:string}|{kind:'procedural';joints:readonly RigJoint[]};
   sourceUrl:string;license:string;editableJoints:readonly string[];
+  appearances?:readonly {id:string;name:string;nameEn:string;url:string}[];
+  motionImport?:'mixamo-human-v1';
   jointControls?:readonly RigJointControl[];
   attribution?:{authors:string;source:string;licenseUrl:string;changes:string};
   chains:Readonly<Record<string,readonly string[]>>;
@@ -24,6 +26,7 @@ export type RigDefinition={
 export const XBOT_RIG:RigDefinition={
   id:'mixamo-xbot-v2',version:1,name:'Mixamo X Bot',nameEn:'Mixamo X Bot',description:'完整人体 IK、手指与脚趾控制',descriptionEn:'Full human IK, fingers and toes',
   strategy:'xbot-humanoid',units:'metres',up:'+Y',forward:'+Z',root:'Hips',initialSelection:'LeftHand',
+  motionImport:'mixamo-human-v1',
   asset:{kind:'gltf',url:'/models/xbot.glb',profileUrl:'/models/xbot-profile.json'},sourceUrl:'/models/XBOT-ASSET.md',license:'Adobe Mixamo terms',
   editableJoints:Object.keys(PART_NAMES),chains:{LeftHand:['LeftArm','LeftForeArm','LeftHand'],RightHand:['RightArm','RightForeArm','RightHand'],LeftFoot:['LeftUpLeg','LeftLeg','LeftFoot'],RightFoot:['RightUpLeg','RightLeg','RightFoot']},
   contacts:END_EFFECTORS,supportContacts:['LeftFoot','RightFoot'],supportOrientation:true,mirrorPairs:Object.keys(PART_NAMES).filter(n=>n.startsWith('Left')).map(n=>[n,n.replace('Left','Right')] as const),

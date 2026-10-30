@@ -1,0 +1,243 @@
+; FBX 7.4.0 project file - MomoPoseForge authored animation fixture
+FBXHeaderExtension: {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+GlobalSettings: {
+	Properties70: {
+		P: "UnitScaleFactor", "double", "Number", "",1
+	}
+}
+Objects: {
+	Model: 1, "Model::mixamorig:Hips", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,100,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 2, "Model::mixamorig:Spine", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,15,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 3, "Model::mixamorig:Spine1", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,15,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 4, "Model::mixamorig:Spine2", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,15,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 5, "Model::mixamorig:Neck", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,15,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 6, "Model::mixamorig:Head", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,12,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 7, "Model::mixamorig:LeftShoulder", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",8,10,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 8, "Model::mixamorig:LeftArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",15,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 9, "Model::mixamorig:LeftForeArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",28,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 10, "Model::mixamorig:LeftHand", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",24,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 11, "Model::mixamorig:LeftUpLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",10,-8,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 12, "Model::mixamorig:LeftLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,-44,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 13, "Model::mixamorig:LeftFoot", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,-43,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 14, "Model::mixamorig:RightShoulder", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-8,10,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 15, "Model::mixamorig:RightArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-15,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 16, "Model::mixamorig:RightForeArm", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-28,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 17, "Model::mixamorig:RightHand", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-24,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 18, "Model::mixamorig:RightUpLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",-10,-8,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 19, "Model::mixamorig:RightLeg", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,-44,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	Model: 20, "Model::mixamorig:RightFoot", "LimbNode" {
+		Version: 232
+		Properties70: {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,-43,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+	}
+	AnimationCurveNode: 100, "AnimCurveNode::R", "" {
+	}
+	AnimationCurveNode: 102, "AnimCurveNode::T", "" {
+	}
+	AnimationCurve: 101, "AnimCurve::", "" {
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,90
+		}
+	}
+	AnimationCurve: 103, "AnimCurve::", "" {
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,100
+		}
+	}
+	AnimationCurve: 104, "AnimCurve::", "" {
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,0
+		}
+	}
+	AnimationCurve: 105, "AnimCurve::", "" {
+		KeyTime: *2 {
+			a: 0,46186158000
+		}
+		KeyValueFloat: *2 {
+			a: 0,0
+		}
+	}
+	AnimationLayer: 200, "AnimLayer::BaseLayer", "" {
+	}
+	AnimationStack: 300, "AnimStack::Arm raise and travel", "" {
+	}
+}
+Connections: {
+	C: "OP",104,100,"d|X"
+	C: "OP",105,100,"d|Y"
+	C: "OO",1,0
+	C: "OO",2,1
+	C: "OO",3,2
+	C: "OO",4,3
+	C: "OO",5,4
+	C: "OO",6,5
+	C: "OO",7,4
+	C: "OO",8,7
+	C: "OO",9,8
+	C: "OO",10,9
+	C: "OO",11,1
+	C: "OO",12,11
+	C: "OO",13,12
+	C: "OO",14,4
+	C: "OO",15,14
+	C: "OO",16,15
+	C: "OO",17,16
+	C: "OO",18,1
+	C: "OO",19,18
+	C: "OO",20,19
+	C: "OP",101,100,"d|Z"
+	C: "OP",100,8,"Lcl Rotation"
+	C: "OO",100,200
+	C: "OP",103,102,"d|X"
+	C: "OP",102,1,"Lcl Translation"
+	C: "OO",102,200
+	C: "OO",200,300
+}

@@ -15,11 +15,13 @@ export class RigSwitchCoordinator<T extends {dispose():void}>{
   private epoch=0;
   private pending:T|null=null;
   constructor(private create:(rig:RigDefinition)=>T,private prepare:(runtime:T,rig:RigDefinition)=>Promise<void>){}
-  async request(rig:RigDefinition,activate:(runtime:T)=>void){
+  async request(rig:RigDefinition,activate:(runtime:T)=>void,prepare?:(runtime:T)=>Promise<void>){
     const token=++this.epoch;this.pending?.dispose();this.pending=null;
     const runtime=this.create(rig);this.pending=runtime;
     try{
       await this.prepare(runtime,rig);
+      if(token!==this.epoch)return false;
+      await prepare?.(runtime);
       if(token!==this.epoch)return false;
       activate(runtime);this.pending=null;return true;
     }catch(error){if(token===this.epoch)throw error;return false;}
