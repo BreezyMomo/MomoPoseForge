@@ -301,7 +301,7 @@ export class PoseEngine {
   private initializeActors(){const id=crypto.randomUUID();this.activeActorId=id;this.model.userData.actorId=id;this.actors=new Map([[id,{id,name:this.activeRig.name,visible:true,locked:false,state:this.captureActorRuntime(),drafts:new Map()}]]);}
   get actorEditable(){const slot=this.actors?.get(this.activeActorId);return !this.sceneLoad&&(!slot||slot.visible&&!slot.locked);}
   setInteractionBlocked(value:boolean){this.interactionBlocked=value;if(value){this.interruptPoseDrag();this.fly?.stop();}this.refreshActors();if(this.orbit)this.orbit.enabled=!value&&this.canNavigateCamera()&&!this.transform.dragging;if(this.ready)this.onInfo(this.info());}
-  actorList():ActorSummary[]{this.stashActor();return [...(this.actors?.values()??[])].map(a=>({id:a.id,name:a.name,rig:a.state.rigDefinition.id,rigVersion:a.state.rigDefinition.version,visible:a.visible,locked:a.locked,position:asVec(a.state.model.position),rotation:[0,THREE.MathUtils.radToDeg(new THREE.Euler().setFromQuaternion(a.state.model.quaternion,'YXZ').y),0]}));}
+  actorList():ActorSummary[]{this.stashActor();return [...(this.actors?.values()??[])].map(a=>{const rotation=new THREE.Euler().setFromQuaternion(a.state.model.quaternion,'YXZ');return {id:a.id,name:a.name,rig:a.state.rigDefinition.id,rigVersion:a.state.rigDefinition.version,visible:a.visible,locked:a.locked,position:asVec(a.state.model.position),rotation:[rotation.x,rotation.y,rotation.z].map(THREE.MathUtils.radToDeg) as Vec3};});}
   sceneSnapshot():SceneDocument{
     this.stashActor();const doc=this.snapshot();return {format:'momo-pose-forge-scene',version:1,name:this.name,activeActor:this.activeActorId,actors:[...(this.actors?.values()??[])].map(a=>({id:a.id,name:a.name,visible:a.visible,locked:a.locked,pose:actorPose(this.usingActor(a,()=>this.snapshot()))})),views:doc.views,camera:doc.camera,referenceImage:doc.referenceImage,props:doc.props};
   }
@@ -310,7 +310,12 @@ export class PoseEngine {
   presetThumbnails(){
     const before=this.snapshot(),actors=this.actors,info=this.onInfo,commit=this.onCommit,center=this.center.clone(),span=this.span,camera=structuredClone(this.cameraState),visibility=[...(actors?.values()??[])].filter(a=>a.id!==this.activeActorId).flatMap(a=>[a.state.model,a.state.helpers,a.state.boneDisplay].map(object=>({object,visible:object.visible}))),result:Record<string,string>={};
     this.actors=undefined;this.onInfo=()=>{};this.onCommit=()=>{};visibility.forEach(v=>{v.object.visible=false;});
-    try{for(const preset of this.activeRig.presets){this.applyPreset(preset,false);result[preset.id]=this.renderImage({...DEFAULT_VIEWS[1],azimuth:22},112,136,'surface').toDataURL('image/webp',.85);}return result;}
+    try{
+      // Library illustrations use the rig's own placement, independent of the
+      // selected actor's imported roll/pitch, shared props and framing lock.
+      this.restorePose(relocatePose(before,this.rest.root));this.props=[];this.syncPropScene();this.cameraState.framing.locked=false;
+      for(const preset of this.activeRig.presets){this.applyPreset(preset,false);result[preset.id]=this.renderImage({...DEFAULT_VIEWS[1],azimuth:22},112,136,'surface').toDataURL('image/webp',.85);}return result;
+    }
     finally{this.apply(before,false,false,false,true,false);this.name=before.name;this.center.copy(center);this.span=span;this.cameraState=camera;this.actors=actors;visibility.forEach(v=>{v.object.visible=v.visible;});this.onInfo=info;this.onCommit=commit;this.syncGizmo();this.refreshActors(true);}
   }
   private controller(state?:ActorRuntime,rig:RigDefinition=this.activeRig){
@@ -326,6 +331,7 @@ export class PoseEngine {
       const s=slot.state;for(const group of [s.model,s.helpers,s.boneDisplay])if(group.parent!==this.scene)this.scene.add(group);
       s.model.userData.actorId=slot.id;s.model.visible=slot.visible&&this.display==='surface';
       s.helpers.visible=slot.id===this.activeActorId&&slot.visible&&!slot.locked&&!s.motion?.active&&!this.actorTransform;
+      if(slot.id===this.activeActorId)this.usingActor(slot,()=>this.syncHandles());
       s.boneDisplay.visible=slot.visible&&this.display==='skeleton';if(rebuildSkeleton&&s.boneDisplay.visible)this.usingActor(slot,()=>this.updateSkeletonDisplay());
     }
     if(this.actorEditable&&!this.interactionBlocked&&!this.motion?.active){this.transform.enabled=true;this.transform.attach(this.gizmo);}else{this.transform.enabled=false;this.transform.detach();}
@@ -1037,10 +1043,16 @@ export class PoseEngine {
     return {...(this.actors?{actors:this.actorList(),activeActor:this.activeActorId,actorTransform:this.actorTransform,actorEditable:this.actorEditable}:{}),motion:this.motion?.state(),appearance:this.appearance,ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),fixedContacts:(this.activeRig.supportContacts??this.activeRig.contacts).filter(end=>this.pins[end]).length,warning:this.warning,symmetry:{...(this.symmetry??defaultSymmetry())},hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,props:structuredClone(this.props??[]),...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
   }
 
+  /** Helpers are separate scene objects, so restoring bones alone leaves stale hit targets. */
+  private syncHandles(){
+    if(!this.ready)return;this.model.updateWorldMatrix(true,true);
+    for(const h of this.handles){const name=h.userData.part as string;const point=this.world(name);h.position.copy(h.parent?h.parent.worldToLocal(point):point);h.visible=!this.humanoid?(this.moreControls||name===this.activeRig.root||name===this.selected||this.effectors.includes(name)):(this.handDetail?!!fingerPart(name)&&name.startsWith(this.handDetail):!fingerPart(name)&&(this.moreControls||this.effectors.includes(name)));const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.4:1);}
+  }
+
   private update(fit:boolean){
     if(!this.ready)return;this.model.updateMatrixWorld(true);
     if(fit)this.fit(false);
-    for(const h of this.handles){const name=h.userData.part as string;h.position.copy(this.world(name));h.visible=!this.humanoid?(this.moreControls||name===this.activeRig.root||name===this.selected||this.effectors.includes(name)):(this.handDetail?!!fingerPart(name)&&name.startsWith(this.handDetail):!fingerPart(name)&&(this.moreControls||this.effectors.includes(name)));const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.4:1);}
+    this.syncHandles();
     if(this.display==='skeleton')this.updateSkeletonDisplay();
     this.onInfo(this.info());
   }

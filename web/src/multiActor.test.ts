@@ -1,7 +1,7 @@
 import {beforeAll,beforeEach,describe,it,expect,vi} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {IDBFactory} from 'fake-indexeddb';
-import {AnimationClip,Bone,Group,Mesh,Object3D,OrthographicCamera,Quaternion,QuaternionKeyframeTrack,Scene,Texture,Vector3,VectorKeyframeTrack} from 'three';
+import {AnimationClip,Bone,Group,Mesh,Object3D,OrthographicCamera,Quaternion,QuaternionKeyframeTrack,Scene,Texture,Vector3,VectorKeyframeTrack,Euler,SphereGeometry,MeshBasicMaterial} from 'three';
 import {GLTFLoader,type GLTF} from 'three/addons/loaders/GLTFLoader.js';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {PoseEngine} from './PoseEngine';
@@ -27,9 +27,47 @@ function fixture(rig:RigDefinition=XBOT_RIG,initialize=true){
 }
 const actor=(e:PoseEngine,id=e.info().activeActor)=>e.sceneSnapshot().actors.find(a=>a.id===id)!;
 const camera=()=>{const c=new OrthographicCamera(-3,3,3,-1,.01,50);c.position.set(0,1,6);c.lookAt(0,1,0);c.updateMatrixWorld();return c;};
+function withRealHandles(e:PoseEngine){
+  e.handles=e.activeRig.editableJoints.filter(name=>e.bones[name]).map(name=>{const handle=new Mesh(new SphereGeometry(.01),new MeshBasicMaterial());handle.userData.part=name;e.helpers.add(handle);return handle;});
+  (e as any).update=(PoseEngine.prototype as any).update;(e as any).update(false);return e;
+}
+function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreaterThan(0);for(const h of e.handles)expect(h.getWorldPosition(new Vector3()).distanceTo(e.world(h.userData.part)),h.userData.part).toBeLessThan(1e-9);}
 function importedClip(e:PoseEngine){const root=e.rest.joints.Hips.position,id='c'.repeat(64),clip=new AnimationClip('Owned clip',1,[...Object.entries(e.rest.joints).map(([n,j])=>new QuaternionKeyframeTrack(`${n}.quaternion`,[0,1],[...j.quaternion,...j.quaternion])),new VectorKeyframeTrack('Hips.position',[0,1],[...root,...root])]);Object.assign(clip,{uuid:`${XBOT_RIG.id}@1:${id}:0:v1`});clip.userData={momoMotion:{assetId:id,fileName:'owned.fbx',format:'fbx',rig:XBOT_RIG.id,rigVersion:1,adapterVersion:1,sampleRate:30,root:'Hips',rootOrigin:root,mappedBones:20,ignoredTranslations:0,reference:'skin-bind'}};return clip;}
 
 describe('独立场景角色与原控制器',()=>{
+  for(const rig of [XBOT_RIG,FOX_RIG])it(`${rig.id}采集预设缩略图及失败恢复后，真实控制点仍与关节世界位置一致`,()=>{
+    const e=withRealHandles(fixture(rig));e.moveActor([1,.25,-.5],35);e.applyPreset(rig.presets[rig.presets.length-1]);const before=e.sceneSnapshot();expectHandlesAligned(e);
+    e.renderImage=vi.fn(()=>({toDataURL:()=> 'preview'} as unknown as HTMLCanvasElement));e.presetThumbnails();expect(e.sceneSnapshot()).toEqual(before);expectHandlesAligned(e);
+    e.renderImage=vi.fn(()=>{throw new Error('preview failed');});expect(()=>e.presetThumbnails()).toThrow('preview failed');expect(e.sceneSnapshot()).toEqual(before);expectHandlesAligned(e);
+  });
+  it('多人恢复、切换、扶正与骨架/通用数据导出均保持当前角色控制点对齐',async()=>{
+    const e=withRealHandles(fixture()),first=e.info().activeActor!;
+    e.loadActorRuntime=vi.fn(async rig=>withRealHandles(fixture(rig,false)).captureActorRuntime());
+    await e.duplicateActor();await e.addActor(FOX_RIG);const doc=e.sceneSnapshot();
+    for(const a of doc.actors){e.selectActor(a.id);e.moveActor([.6,.1,-.2],30);expectHandlesAligned(e);}
+    e.selectActor(first);const before=e.sceneSnapshot();await e.restoreScene(before,{},false);expectHandlesAligned(e);
+    e.openPose(camera(),512,512,false);e.sceneJoints(camera(),512,512);expectHandlesAligned(e);expect(e.sceneSnapshot()).toEqual(before);
+  });
+  for(const rig of [XBOT_RIG,FOX_RIG,BASIC_HUMAN_RIG])it(`${rig.id}扶正只清除选中实例整体倾斜，保留关节、朝向和世界固定关系`,async()=>{
+    const e=fixture(rig),selected=e.info().activeActor!,contact=rig.contacts[0];e.select(contact);e.setPin(true,true);
+    const tilted=relocatePose(e.snapshot(),{position:[1.5,.3,-.8],quaternion:new Quaternion().setFromEuler(new Euler(.2,.4,-.55,'YXZ')).toArray()});(e as any).restorePose(tilted);
+    await e.duplicateActor();await e.addActor(rig===FOX_RIG?XBOT_RIG:FOX_RIG);e.selectActor(selected);
+    const before=e.sceneSnapshot(),summary=e.actorList().find(a=>a.id===selected)!;expect(Math.abs(summary.rotation[2])).toBeGreaterThan(20);vi.mocked(e.onCommit).mockClear();
+    e.moveActor(summary.position,summary.rotation[1]);const after=e.sceneSnapshot(),upright=e.actorList().find(a=>a.id===selected)!;
+    expect(upright.rotation[0]).toBeCloseTo(0);expect(upright.rotation[2]).toBeCloseTo(0);expect(upright.rotation[1]).toBeCloseTo(summary.rotation[1]);expect(upright.position).toEqual(summary.position);
+    expect(e.snapshot().joints).toEqual(tilted.joints);expect(e.snapshot().pins).toEqual(relocatePose(tilted,e.snapshot().root).pins);expect(e.onCommit).toHaveBeenCalledOnce();
+    for(const a of before.actors)if(a.id!==selected)expect(after.actors.find(b=>b.id===a.id)).toEqual(a);
+    await e.restoreScene(before,{},false);expect(e.sceneSnapshot()).toEqual(before);await e.restoreScene(readSceneDocument(JSON.stringify(after)),{},false);expect(e.sceneSnapshot()).toEqual(after);
+  });
+  for(const rig of [XBOT_RIG,FOX_RIG])it(`${rig.id}预设缩略图使用独立标准摆放，结束后完整恢复多人和共享场景`,async()=>{
+    const e=fixture(rig),selected=e.info().activeActor!;(e as any).restorePose(relocatePose(e.snapshot(),{position:[2,.4,-1],quaternion:new Quaternion().setFromEuler(new Euler(.2,.6,-.55)).toArray()}));
+    await e.duplicateActor();await e.addActor(rig===FOX_RIG?XBOT_RIG:FOX_RIG);e.selectActor(selected);e.addProp('table');e.cameraState.framing.locked=true;
+    const before=e.sceneSnapshot();vi.mocked(e.onCommit).mockClear();
+    const roots:PoseDocument['root'][]=[];e.renderImage=vi.fn(()=>{roots.push(e.snapshot().root);expect(e.props).toEqual([]);expect(e.cameraState.framing.locked).toBe(false);return {toDataURL:()=> 'preview'} as unknown as HTMLCanvasElement;});
+    const images=e.presetThumbnails();expect(Object.keys(images)).toHaveLength(rig.presets.length);expect(roots.length).toBeGreaterThan(0);for(const root of roots)expect(root).toEqual(e.rest.root);
+    expect(e.sceneSnapshot()).toEqual(before);expect(e.onCommit).not.toHaveBeenCalled();
+    e.renderImage=vi.fn(()=>{throw new Error('render failure');});expect(()=>e.presetThumbnails()).toThrow('render failure');expect(e.sceneSnapshot()).toEqual(before);
+  });
   it('人体与狐狸同时存在，切换选择不替换其他角色，骨骼各自独立',async()=>{const e=fixture(),id=e.info().activeActor!,humanBefore=actor(e);await e.addActor(FOX_RIG);const foxId=e.info().activeActor!;expect(e.actorList()).toHaveLength(2);expect(e.activeRig.id).toBe(FOX_RIG.id);expect(actor(e,id)).toEqual(humanBefore);const foxBefore=actor(e);e.select('b_Head_05');e.setSelectedRotation(1,15);expect(actor(e).pose.joints).not.toEqual(foxBefore.pose.joints);e.selectActor(id);expect(e.activeRig.id).toBe(XBOT_RIG.id);expect(actor(e,id)).toEqual(humanBefore);expect(actor(e,foxId).pose.joints).not.toEqual(foxBefore.pose.joints);});
   it('同种人体可复制，编辑关节不联动，复制件整体错开',async()=>{const e=fixture(),first=e.info().activeActor!,before=actor(e);await e.duplicateActor();const second=e.info().activeActor!;expect(second).not.toBe(first);expect(actor(e).pose.root.position[0]).toBeCloseTo(.8);expect(e.bones.Hips).not.toBe((e as any).actors.get(first).state.bones.Hips);e.select('Head');e.setSelectedRotation(1,20);expect(actor(e,first)).toEqual(before);e.selectActor(first);expect(e.bones.Head.quaternion.toArray()).toEqual(before.pose.joints.Head.quaternion);});
   it('整体移动与朝向同步固定点，局部骨骼姿势和其他角色不变',async()=>{const e=fixture();await e.addActor(FOX_RIG);const foxId=e.info().activeActor!,foxBefore=actor(e);e.selectActor(e.actorList()[0].id);e.setFeetPin(true);const pose=e.snapshot();e.moveActor([2,0,1],90);expect(e.snapshot().joints).toEqual(pose.joints);const expected=relocatePose(pose,e.snapshot().root);expect(e.snapshot().pins).toEqual(expected.pins);expect(e.snapshot().targets).toEqual(expected.targets);expect(actor(e,foxId)).toEqual(foxBefore);});
