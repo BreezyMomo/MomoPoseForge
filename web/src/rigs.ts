@@ -4,7 +4,7 @@ import {PRESETS} from './presets';
 import {FOX_RIG} from './foxRig';
 import {BODYCHAN_RIG,BODYKUN_RIG} from './bodyFigureRigs';
 
-export type RigJointControl={name:string;label:string;labelEn:string;limits?:[Vec3,Vec3];hinge?:0|1|2};
+export type RigJointControl={name:string;label:string;labelEn:string;limits?:[Vec3,Vec3];hinge?:0|1|2;ikHinge?:{axis:Vec3;min:number;max:number}};
 export type RigJoint=RigJointControl&{parent:string|null;position:Vec3};
 export type RigDefinition={
   id:string;version:number;name:string;nameEn:string;description:string;descriptionEn:string;
@@ -16,7 +16,7 @@ export type RigDefinition={
   jointControls?:readonly RigJointControl[];
   attribution?:{authors:string;source:string;licenseUrl:string;changes:string};
   chains:Readonly<Record<string,readonly string[]>>;
-  ik?:{solver:'constrained-fk';version:1};
+  ik?:{solver:'constrained-fk';version:1;contactType?:'paws'|'hands-feet'};
   supportContacts?:readonly string[];
   supportOrientation?:boolean;
   soles?:Readonly<Record<string,import('./footContacts').SoleDefinition>>;

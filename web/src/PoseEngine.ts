@@ -438,7 +438,7 @@ export class PoseEngine {
   }
 
   solve(end: string, target: THREE.Vector3, pole?: THREE.Vector3, preserveEndOrientation=true) {
-    if(this.activeRig.ik){const result=solveRigChain(this.articulatedState(),end,target);if(result.error>.003)this.warning='爪子目标已到关节可达范围，剩余 '+(result.error*100).toFixed(1)+' 厘米';return {...result,end:result.position};}
+    if(this.activeRig.ik){const result=solveRigChain(this.articulatedState(),end,target);if(result.error>.003)this.warning=(this.activeRig.jointControls?.find(j=>j.name===end)?.label??'末端')+'目标已到关节可达范围，剩余 '+(result.error*100).toFixed(1)+' 厘米';return {...result,end:result.position};}
     const chain = CHAINS[end]; if (!chain) return;
     const [a,b,c] = chain;
     const start = this.world(a), mid = this.world(b), last = this.world(c),endOrientation=this.bones[c].getWorldQuaternion(new Q());
@@ -571,7 +571,7 @@ export class PoseEngine {
       this.model.updateMatrixWorld(true);const result=solveRigContacts(state,pins);
       if(result.positionError<=tolerance.position&&result.orientationError<=tolerance.orientation){low=t;best=this.snapshot();}else high=t;
     }
-    this.restorePose(best);this.warning='已到固定爪子允许的关节范围，请缩小移动幅度或解除固定';
+    this.restorePose(best);this.warning=`已到固定${this.activeRig.ik?.contactType==='hands-feet'?'手脚':'爪子'}允许的关节范围，请缩小移动幅度或解除固定`;
   }
 
   private keepPinnedPose(baseline:PoseDocument){

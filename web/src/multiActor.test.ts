@@ -49,11 +49,13 @@ describe('独立场景角色与原控制器',()=>{
     e.selectActor(first);const other=e.sceneSnapshot().actors.filter(a=>a.id!==first);await e.replaceActorRig(FOX_RIG);await e.replaceActorRig(YBOT_RIG);expect(e.snapshot().joints).toEqual(pose.joints);expect(e.sceneSnapshot().actors.filter(a=>a.id!==first)).toEqual(other);
   });
 
-  for(const rig of [BODYCHAN_RIG,BODYKUN_RIG])it(`${rig.id}真实网格 FK、多实例、四种骨架混合、保存恢复与关节导出独立`,async()=>{
+  for(const rig of [BODYCHAN_RIG,BODYKUN_RIG])it(`${rig.id}真实网格 IK/FK、固定、多实例、四种骨架混合、保存恢复与关节导出独立`,async()=>{
     const e=withRealHandles(fixture(rig)),first=e.info().activeActor!,lengths=Object.fromEntries(Object.entries(e.bones).map(([n,b])=>[n,b.position.length()]));
     expect(Object.keys(e.bones)).toHaveLength(53);expectHandlesAligned(e);const hand=e.world('left_hand');
     e.select('left_forearm');e.setSelectedRotation(0,60);expect(e.world('left_hand').distanceTo(hand)).toBeGreaterThan(.03);expect(e.canTranslate()).toBe(false);
     for(const [n,b]of Object.entries(e.bones))expect(b.position.length()).toBeCloseTo(lengths[n],10);
+    e.select('left_hand');const y=e.world('left_hand').y;e.setSelectedPosition(1,y+.08);expect(e.world('left_hand').y-y).toBeGreaterThan(.07);
+    e.setFeetPin(true);e.select('pelvis');e.setSelectedPosition(1,e.world('pelvis').y-.04);for(const [n,p]of Object.entries(e.pins))expect(e.world(n).distanceTo(new Vector3().fromArray(p!.position))).toBeLessThan(.0015);expectHandlesAligned(e);
     const pose=e.snapshot();expect(parseDocument(JSON.stringify(pose),e.rest,rig).joints).toEqual(JSON.parse(JSON.stringify(pose.joints)));
     const original=actor(e);await e.duplicateActor();const duplicate=e.info().activeActor!;e.select('left_forearm');e.setSelectedRotation(0,20);expect(actor(e,first)).toEqual(original);expect(e.bones.left_forearm).not.toBe((e as any).actors.get(first).state.bones.left_forearm);
     await e.addActor(rig===BODYCHAN_RIG?BODYKUN_RIG:BODYCHAN_RIG);await e.addActor(FOX_RIG);await e.addActor(XBOT_RIG);
@@ -78,7 +80,7 @@ describe('独立场景角色与原控制器',()=>{
     for(const slot of [e.views[3],e.views[4]]){const camera=e.viewCamera(slot,1);expect(Math.abs(camera.getWorldDirection(new Vector3()).y)).toBeCloseTo(1,12);expect(e.openPose(camera,512,512,false).people).toHaveLength(2);expect(e.sceneJoints(camera,512,512).actors).toHaveLength(3);}
     expect(e.sceneSnapshot()).toEqual(before);
   });
-  for(const rig of [XBOT_RIG,FOX_RIG])it(`${rig.id}固定末端禁止拖动和数值移动；方向固定禁止旋转，解除后恢复且无空历史`,async()=>{
+  for(const rig of [XBOT_RIG,FOX_RIG,BODYCHAN_RIG,BODYKUN_RIG])it(`${rig.id}固定末端禁止拖动和数值移动；方向固定禁止旋转，解除后恢复且无空历史`,async()=>{
     const e=withRealHandles(fixture(rig)),end=(rig.supportContacts??rig.contacts)[0];(e as any).syncGizmo=(PoseEngine.prototype as any).syncGizmo;
     e.transform.attach=vi.fn();e.transform.detach=vi.fn();e.setFeetPin(true);e.select(end);if(!e.pins[end]!.orientation)e.setPin(true,true);
     const before=e.snapshot();vi.mocked(e.onCommit).mockClear();expect(e.canTranslate()).toBe(false);expect(e.canRotateAxis(0)).toBe(false);expect(e.transform.enabled).toBe(false);

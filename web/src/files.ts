@@ -45,7 +45,7 @@ export function parseDocument(text:string,rest:PoseDocument,definition:RigDefini
     const j=d.joints[name];if(!record(j)||!vector(j.position,3)||!quaternion(j.quaternion))throw new Error(`骨骼 ${name} 的数据无效`);
     if(name!==rig.root&&j.position.some((v,i)=>Math.abs(v-base.position[i])>.0001))throw new Error('工程中的骨段长度与当前骨架不一致');
   }
-  // The original Fox FK format had no IK controls. Preserve its joint pose and
+  // Legacy FK projects had no IK controls. Preserve its joint pose and
   // let the runtime derive targets from that pose after loading.
   if(rig.ik&&d.ikVersion===undefined&&Object.keys(d.targets).length===0&&Object.keys(d.poles).length===0&&Object.keys(d.pins).length===0)d.targets=structuredClone(rest.targets);
   if(d.ikVersion!==undefined&&(!rig.ik||d.ikVersion!==rig.ik.version))throw new Error('IK 控制版本不兼容');
