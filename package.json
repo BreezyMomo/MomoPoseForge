@@ -4,7 +4,11 @@
   "version": "0.7.0",
   "type": "module",
   "scripts": {
+    "check:setup": "node tools/check-workbench.mjs",
+    "test:setup": "node --test tools/check-workbench.test.mjs",
+    "predev": "npm run check:setup",
     "dev": "vite --host 127.0.0.1 --port 5173",
+    "prebuild": "npm run check:setup",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "test": "vitest run"

@@ -19,13 +19,15 @@ Fox 的模型、骨骼及动画分别由 PixelMannen、tomkranis、AsoboStudio �
 多角色五视图导出：素体、深度、法线和 mask 统一渲染所有可见角色及道具，保留相互遮挡；锁定角色仍参与，隐藏角色不参与。OpenPose 的 `people[]` 只包含人体并附 `actor_id`；`skeleton.png` 与 `joints.json` 包含全部可见骨架，按实例 ID 区分。图像 ZIP 中 `project.scene.json` 恢复整个场景，兼容的 `project.pose.json` 仅含选中角色；完整资源转移仍使用 `.poseforge`。
 
 ```powershell
-npm install
+npm ci
 npm run dev
 ```
 
 开发预览：<http://127.0.0.1:5173/>。
 
 共享工作台：布局、外观、语言和界面动效核心来自独立的 `@momo/workbench`，包源码维护在 MomoWorkbench 仓库。本站通过 `vendor/momo-workbench-0.2.0.tgz` 安装固定版本，克隆本仓库后运行 `npm ci` 即可构建，不依赖旁边存在框架仓库。更新时从框架生成新包，同步替换 vendor 文件及依赖锁。
+
+跨电脑复制源码时保留 `vendor/`、`package.json` 和 `package-lock.json`，在项目根目录重新运行 `npm ci`；不要沿用另一台电脑的 `node_modules/`。本项目已使用 Node 24.13.1 验证。若出现 `Failed to resolve import "@momo/workbench/appearance"` 等错误，先停止开发服务，再运行 `npm ci` 和 `npm run dev`。`npm run dev` 与 `npm run build` 会检查框架包、安装版本及所需导出；也可单独运行 `npm run check:setup`。该检查只报告问题，不自动改动依赖。无需另外克隆共享框架，更不应把导入改成本机绝对路径。
 
 工作台顶部“布局”可停靠、拆分、合并、悬浮、关闭及找回姿势库、三维视口、属性和五视图面板，并保存命名布局；移动面板不重建三维角色或丢失姿态。紧凑屏幕默认聚焦视口，通过顶部入口切换姿势库或属性。布局和外观、语言偏好独立保存，不写入姿态工程或撤销历史。
 
