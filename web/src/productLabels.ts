@@ -3,7 +3,7 @@ import {PART_NAMES,DIGIT_NAMES,type Digit,type Preset,type ViewSlot} from './typ
 import {PRESET_SCOPES,type PresetScope} from './presetScopes';
 import {HAND_GESTURES,type HandGesture} from './handGestures';
 import {PROP_KINDS,type PropKind} from './sceneProps';
-import {DEFAULT_VIEWS} from './types';
+import {VIEW_DIRECTIONS,normalizeViewNames} from './viewDirections';
 import {controlDescription} from './poseControls';
 
 // Human-specific display metadata belongs to PoseForge, never the shared workbench.
@@ -26,8 +26,7 @@ export const categoryName=(id:string)=>english()?(categories[id]??id):id;
 const scopes:Record<PresetScope,[string,string]>={all:['Full body','Replace the complete pose and hand shapes.'],upper:['Upper body','Apply the torso and arms; preserve pelvis, legs, head and hand shapes.'],lower:['Lower body','Apply pelvis and legs; retain upper-body local rotations.'],head:['Head','Apply neck and head rotations relative to the current torso.']};
 export const scopeName=(id:PresetScope)=>english()?scopes[id][0]:PRESET_SCOPES[id].label;
 export const scopeHelp=(id:PresetScope)=>english()?scopes[id][1]:PRESET_SCOPES[id].help;
-const viewNames:Record<string,string>={front:'Front',oblique:'Three-quarter',side:'Side',high:'High angle',low:'Low angle'};
-export function viewName(view:ViewSlot){return english()&&view.name===DEFAULT_VIEWS.find(v=>v.id===view.id)?.name?(viewNames[view.id]??view.name):view.name;}
+export function viewName(view:ViewSlot){const name=normalizeViewNames([view])[0].name;return english()?(VIEW_DIRECTIONS.find(v=>v.name===name)?.nameEn??name):name;}
 const gestureNames:Record<string,string>={open:'Open hand',fist:'Fist',point:'Point',relaxed:'Relaxed',peace:'Peace sign','thumbs-up':'Thumbs up',okay:'OK sign',pinch:'Pinch',grip:'Grip',cup:'Support',together:'Fingers together',hook:'Hook'};
 export const gestureName=(gesture:HandGesture,builtin=true)=>english()&&builtin?(gestureNames[gesture.id]??gesture.name):gesture.name;
 export function currentGestureName(name:string){if(!english())return name;if(name==='自定义')return 'Custom';const gesture=HAND_GESTURES.find(g=>g.name===name);return gesture?gestureName(gesture):name;}

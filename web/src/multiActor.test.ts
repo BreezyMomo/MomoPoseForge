@@ -35,6 +35,13 @@ function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreater
 function importedClip(e:PoseEngine){const root=e.rest.joints.Hips.position,id='c'.repeat(64),clip=new AnimationClip('Owned clip',1,[...Object.entries(e.rest.joints).map(([n,j])=>new QuaternionKeyframeTrack(`${n}.quaternion`,[0,1],[...j.quaternion,...j.quaternion])),new VectorKeyframeTrack('Hips.position',[0,1],[...root,...root])]);Object.assign(clip,{uuid:`${XBOT_RIG.id}@1:${id}:0:v1`});clip.userData={momoMotion:{assetId:id,fileName:'owned.fbx',format:'fbx',rig:XBOT_RIG.id,rigVersion:1,adapterVersion:1,sampleRate:30,root:'Hips',rootOrigin:root,mappedBones:20,ignoredTranslations:0,reference:'skin-bind'}};return clip;}
 
 describe('独立场景角色与原控制器',()=>{
+  it('同种多实例与人体狐狸混合场景共用顶视/底视，保存恢复及多人导出保持姿势独立',async()=>{
+    const e=fixture();await e.duplicateActor();await e.addActor(FOX_RIG);const bodies=e.sceneSnapshot().actors;
+    e.setViewDirection('high','top');e.setViewDirection('low','bottom');const before=e.sceneSnapshot();expect(before.actors).toEqual(bodies);
+    await e.restoreScene(readSceneDocument(JSON.stringify(before)),{},false);expect(e.sceneSnapshot()).toEqual(before);
+    for(const slot of [e.views[3],e.views[4]]){const camera=e.viewCamera(slot,1);expect(Math.abs(camera.getWorldDirection(new Vector3()).y)).toBeCloseTo(1,12);expect(e.openPose(camera,512,512,false).people).toHaveLength(2);expect(e.sceneJoints(camera,512,512).actors).toHaveLength(3);}
+    expect(e.sceneSnapshot()).toEqual(before);
+  });
   for(const rig of [XBOT_RIG,FOX_RIG])it(`${rig.id}固定末端禁止拖动和数值移动；方向固定禁止旋转，解除后恢复且无空历史`,async()=>{
     const e=withRealHandles(fixture(rig)),end=(rig.supportContacts??rig.contacts)[0];(e as any).syncGizmo=(PoseEngine.prototype as any).syncGizmo;
     e.transform.attach=vi.fn();e.transform.detach=vi.fn();e.setFeetPin(true);e.select(end);if(!e.pins[end]!.orientation)e.setPin(true,true);

@@ -2,6 +2,7 @@ import {describe,it,expect,vi} from 'vitest';
 import fs from 'node:fs';
 import {Bone,Group,Object3D,Vector3,PerspectiveCamera,OrthographicCamera,Quaternion,Scene} from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {PoseEngine} from './PoseEngine';
 import {captureCamera,restoreCamera,defaultCameraSettings,validateCameraSettings} from './cameraState';
 import {parseDocument} from './files';
@@ -24,6 +25,41 @@ async function fixture(){
   e.rest=e.snapshot();e.ready=true;e.applyPreset(PRESETS[0],false);e.focus();return e;
 }
 const matrix=(e:PoseEngine)=>e.camera.matrixWorld.toArray();
+describe('斜角与垂直上下视图',()=>{
+  it('顶视/底视在各方位角精确沿 Y 轴观察，画面朝上方向稳定且矩阵无奇异值',async()=>{
+    const e=await fixture();
+    for(const elevation of [90,-90])for(const azimuth of [0,45,90,180,-90]){
+      const camera=e.viewCamera({id:'high',name:'垂直',azimuth,elevation},1),sign=Math.sign(elevation),a=azimuth*Math.PI/180;
+      expect(camera.getWorldDirection(new Vector3()).distanceTo(new Vector3(0,-sign,0))).toBeLessThan(1e-12);
+      expect(camera.position.x).toBe(e.center.x);expect(camera.position.z).toBe(e.center.z);
+      expect(camera.matrixWorld.elements.every(Number.isFinite)).toBe(true);expect(camera.matrixWorld.determinant()).toBeCloseTo(1,12);
+      const center=e.center.clone().project(camera),up=e.center.clone().add(new Vector3(-Math.sin(a),0,-sign*Math.cos(a))).project(camera);
+      expect(Math.abs(center.x)+Math.abs(center.y)).toBeLessThan(1e-12);expect(up.y).toBeGreaterThan(center.y);
+    }
+  });
+  it('真实 OrbitControls 初始化不偏移垂直镜头，书签/工程恢复仍为精确顶视',async()=>{
+    const e=await fixture();e.orbit=new OrbitControls(e.camera);e.orbit.enableDamping=false;
+    e.setViewDirection('high','top');e.setView('high');const before=matrix(e),pose=e.snapshot().joints;
+    expect(e.camera.getWorldDirection(new Vector3()).distanceTo(new Vector3(0,-1,0))).toBeLessThan(1e-12);expect(e.views[3].name).toBe('顶视');
+    e.saveCameraBookmark('垂直');const bookmark=e.cameraState.bookmarks[0];e.setView('side');e.loadCameraBookmark(bookmark.id);expect(matrix(e)).toEqual(before);
+    expect(e.snapshot().joints).toEqual(pose);const doc=e.snapshot();e.apply(parseDocument(JSON.stringify(doc),e.rest));expect(matrix(e)).toEqual(before);
+    for(const [name,joint] of Object.entries(pose)){expect(e.bones[name].position.distanceTo(new Vector3().fromArray(joint.position))).toBeLessThan(1e-12);expect(e.bones[name].quaternion.angleTo(new Quaternion().fromArray(joint.quaternion))).toBeLessThan(1e-7);}
+    e.setView('high');e.resetViews();expect(e.views[3]).toEqual(DEFAULT_VIEWS[3]);expect(e.camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-Math.SQRT1_2,12);
+  });
+  it('支持 ±90° 工程，旧默认名称更新但自定义名称/角度保留；观察锁独立于槽位配置',async()=>{
+    const e=await fixture();e.setFramingLock(true);const frame=e.getCameraSettings().framing;e.setCameraLock(true);const camera=matrix(e);
+    e.setViewDirection('high','top');e.renameView('low','我的底稿');e.setViewDirection('low','bottom');expect(matrix(e)).toEqual(camera);expect(e.getCameraSettings().framing).toEqual(frame);expect(e.views[4].name).toBe('我的底稿');
+    const doc=e.snapshot(),parsed=parseDocument(JSON.stringify(doc),e.rest);expect(parsed.views).toEqual(doc.views);
+    const invalid=structuredClone(doc);invalid.views[3].elevation=90.01;expect(()=>parseDocument(JSON.stringify(invalid),e.rest)).toThrow('五视图');
+    const old=structuredClone(doc);old.views[3]={id:'high',name:'俯视',azimuth:0,elevation:45};old.views[4]={id:'low',name:'仰视',azimuth:0,elevation:-30};const updated=parseDocument(JSON.stringify(old),e.rest);expect(updated.views[3].name).toBe('斜俯视');expect(updated.views[4].name).toBe('斜仰视');expect(old.views[3].name).toBe('俯视');
+    old.views[3].elevation=60;expect(parseDocument(JSON.stringify(old),e.rest).views[3]).toEqual(old.views[3]);
+  });
+  it('从垂直观察复制到另一个槽位保留方位和画面朝向，更新默认名且保留用户命名',async()=>{
+    const e=await fixture(),source={id:'high',name:'顶视',azimuth:120,elevation:90};e.camera=e.viewCamera(source);e.orbit.object=e.camera;e.orbit.target.copy(e.center);
+    e.captureView('oblique');expect(e.views[1].azimuth).toBeCloseTo(120,10);expect(e.views[1].elevation).toBe(90);expect(e.views[1].name).toBe('顶视');expect(e.viewCamera(e.views[1]).quaternion.angleTo(e.camera.quaternion)).toBeLessThan(1e-7);
+    e.renameView('low','我的镜头');e.captureView('low');expect(e.views[4].name).toBe('我的镜头');
+  });
+});
 describe('道具场景与接触辅助',()=>{
   it('道具上限与非法修改在产生历史前拦截，不改变人体、镜头或已有场景',async()=>{
     const e=await fixture(),body=e.snapshot().joints,camera=e.getCameraSettings().active;

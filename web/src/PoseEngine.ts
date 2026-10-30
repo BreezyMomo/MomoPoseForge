@@ -31,6 +31,7 @@ import {parseMotionSource,checkMotionAbort,MAX_MOTION_BYTES} from './motionImpor
 import {retargetMixamoMotion} from './mixamoMotion';
 import {motionLibrary,packMotionAsset,unpackMotionAsset,type MotionAsset} from './motionLibrary';
 import {plantedFoot,solePoint,soleBall,type FootContactMode} from './footContacts';
+import {VIEW_DIRECTIONS,normalizeViewNames,isDirectionName,viewDirectionId,type ViewDirectionId} from './viewDirections';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 // These routines are the X Bot humanoid strategy. Generic FK rigs never enter them.
@@ -343,7 +344,7 @@ export class PoseEngine {
   moveActor(position:Vec3,yaw:number,commit=true){if(!this.actorEditable||!position.every(n=>Number.isFinite(n)&&Math.abs(n)<=10)||!Number.isFinite(yaw))return;this.prepareSwitch();const pose=relocatePose(this.snapshot(),{position,quaternion:new Q().setFromAxisAngle(new V(0,1,0),THREE.MathUtils.degToRad(yaw)).toArray()});this.restorePose(pose);this.syncGizmo();this.update(true);if(commit)this.commit();}
   private activateScene(doc:SceneDocument,slots:Map<string,ActorSlot>){
     for(const slot of this.actors?.values()??[])for(const group of [slot.state.model,slot.state.helpers,slot.state.boneDisplay])group.removeFromParent();
-    this.actors=slots;this.activeActorId=doc.activeActor;this.name=doc.name;this.views=structuredClone(doc.views);this.cameraState=structuredClone(doc.camera??defaultCameraSettings());this.referenceImage=structuredClone(doc.referenceImage);this.props=structuredClone(doc.props??[]);this.syncPropScene();
+    this.actors=slots;this.activeActorId=doc.activeActor;this.name=doc.name;this.views=normalizeViewNames(doc.views);this.cameraState=structuredClone(doc.camera??defaultCameraSettings());this.referenceImage=structuredClone(doc.referenceImage);this.props=structuredClone(doc.props??[]);this.syncPropScene();
     // Validated project snapshots are exact state, not a new IK solve. Re-projecting
     // limits here would slowly alter untouched actors during selection and undo.
     for(const actor of doc.actors){const slot=slots.get(actor.id)!;this.usingActor(slot,()=>this.apply(poseWithScene(actor.pose,doc),false,false,false,true,false));}
@@ -1077,7 +1078,7 @@ export class PoseEngine {
     if(doc.appearance&&(!validAppearance(doc.appearance,this.activeRig)||!this.appearanceGroups?.has(doc.appearance.id)))throw new Error('工程使用的角色外观尚未载入');
     this.cancelMotion();this.setAppearance(doc.appearance,false);
     this.suppress=true;this.fly?.stop();this.warning='';this.name=doc.name;this.ground=doc.ground;
-    if(restoreView){this.views=structuredClone(doc.views);this.cameraState=structuredClone(doc.camera??defaultCameraSettings());}
+    if(restoreView){this.views=normalizeViewNames(doc.views);this.cameraState=structuredClone(doc.camera??defaultCameraSettings());}
     if(restoreReference)this.referenceImage=doc.referenceImage?structuredClone(doc.referenceImage):undefined;
     if(restoreSymmetry)this.symmetry={...(doc.symmetry??defaultSymmetry())};
     this.fullBody=this.activeRig.capabilities.fullBodyIK&&(doc.fullBody??true);this.props=structuredClone(doc.props??[]);this.syncPropScene();
@@ -1137,7 +1138,13 @@ export class PoseEngine {
   }
   private restoreObservation(pose:CameraSettings['active'],view='free'){
     this.fly?.stop();this.camera=restoreCamera(pose,this.host.clientWidth/Math.max(1,this.host.clientHeight));this.view=view;
-    this.orbit.object=this.camera;this.orbit.target.fromArray(pose.target);this.transform.camera=this.camera;this.orbit.update();
+    this.orbit.object=this.camera;this.orbit.target.fromArray(pose.target);this.transform.camera=this.camera;this.syncOrbitPose();
+  }
+  private syncOrbitPose(){
+    // OrbitControls clamps its polar angle away from the poles. Keep the exact
+    // programmatically selected pose after initializing its navigation state.
+    const position=this.camera.position.clone(),rotation=this.camera.quaternion.clone();
+    this.orbit.update();this.camera.position.copy(position);this.camera.quaternion.copy(rotation);this.camera.updateMatrixWorld(true);
   }
   private commitCamera(){
     if(!this.ready||this.suppress)return;this.cameraState=this.getCameraSettings();this.onInfo(this.info());this.onCommit(this.snapshot(),false);
@@ -1150,6 +1157,11 @@ export class PoseEngine {
     if(!this.cameraState.locked&&this.view!=='free')this.setView(this.view,false);this.commitCamera();return true;
   }
   renameView(id:string,name:string){const slot=this.views.find(v=>v.id===id);if(!slot||!name.trim()||name.length>30)return;slot.name=name.trim();this.commitCamera();}
+  setViewDirection(id:string,direction:ViewDirectionId){
+    const slot=this.views.find(v=>v.id===id),preset=VIEW_DIRECTIONS.find(v=>v.id===direction);if(!slot||!preset)return;
+    const rename=isDirectionName(slot.name);slot.azimuth=preset.azimuth;slot.elevation=preset.elevation;if(rename)slot.name=preset.name;
+    this.fit(false);if(!this.cameraState.locked&&this.view===id)this.setView(id,false);this.commitCamera();
+  }
   setFov(fov:number){
     if(this.cameraState.locked||!Number.isFinite(fov))return;this.fly?.stop();this.cameraState.fov=THREE.MathUtils.clamp(fov,15,100);
     if(this.camera instanceof THREE.PerspectiveCamera){this.camera.fov=this.cameraState.fov;this.camera.updateProjectionMatrix();}this.commitCamera();
@@ -1189,7 +1201,9 @@ export class PoseEngine {
   viewCamera(slot:ViewSlot,aspect=.75){
     const half=this.span/2,cam=new THREE.OrthographicCamera(-half*aspect,half*aspect,half,-half,.01,50);
     const a=THREE.MathUtils.degToRad(slot.azimuth),e=THREE.MathUtils.degToRad(slot.elevation);
-    cam.position.set(Math.sin(a)*Math.cos(e)*5,Math.sin(e)*5,Math.cos(a)*Math.cos(e)*5).add(this.center);cam.lookAt(this.center);cam.updateMatrixWorld();return cam;
+    if(Math.abs(slot.elevation)===90){const sign=Math.sign(slot.elevation);cam.position.set(0,sign*5,0);cam.up.set(-Math.sin(a),0,-sign*Math.cos(a));}
+    else cam.position.set(Math.sin(a)*Math.cos(e)*5,Math.sin(e)*5,Math.cos(a)*Math.cos(e)*5);
+    cam.position.add(this.center);cam.lookAt(this.center);cam.updateMatrixWorld();return cam;
   }
   setView(id:string,persist=true){
     if(this.cameraState?.locked&&persist)return;
@@ -1198,14 +1212,17 @@ export class PoseEngine {
     this.view=id;
     if(slot)this.camera=this.viewCamera(slot,aspect);
     else {this.camera=new THREE.PerspectiveCamera(this.cameraState?.fov??35,aspect,.01,100);this.camera.position.copy(this.center).add(new V(1.25,.55,2.8));this.camera.lookAt(this.center);}
-    this.orbit.object=this.camera;this.orbit.target.copy(this.center);this.transform.camera=this.camera;this.orbit.update();if(persist)this.commitCamera();
+    this.orbit.object=this.camera;this.orbit.target.copy(this.center);this.transform.camera=this.camera;this.syncOrbitPose();if(persist)this.commitCamera();
   }
   captureView(id:string){
     const direction=this.camera.position.clone().sub(this.orbit.target).normalize();
     const slot=this.views.find(v=>v.id===id);if(!slot)return;
-    slot.azimuth=THREE.MathUtils.radToDeg(Math.atan2(direction.x,direction.z));slot.elevation=THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(Math.asin(direction.y)),-89,89);this.fit(false);this.commitCamera();
+    const right=new V(1,0,0).applyQuaternion(this.camera.quaternion);
+    slot.azimuth=THREE.MathUtils.radToDeg(Math.hypot(direction.x,direction.z)>1e-8?Math.atan2(direction.x,direction.z):Math.atan2(-right.z,right.x));slot.elevation=THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(direction.y,-1,1)));
+    const preset=VIEW_DIRECTIONS.find(v=>v.id===viewDirectionId(slot));if(preset&&isDirectionName(slot.name))slot.name=preset.name;
+    this.fit(false);this.commitCamera();
   }
-  resetViews(){this.views=structuredClone(DEFAULT_VIEWS);this.fit(false);this.commitCamera();}
+  resetViews(){this.views=structuredClone(DEFAULT_VIEWS);this.fit(false);if(!this.cameraState.locked&&this.view!=='free')this.setView(this.view,false);this.commitCamera();}
   focus(){if(this.handDetail)this.setHandDetail(null);if(this.cameraState?.locked)return;this.fit(false);this.setView(this.view);}
 
   cocoWorld(){
@@ -1285,6 +1302,8 @@ export class PoseEngine {
   renderCurrent(width:number,height:number,kind:'surface'|'skeleton',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
   getThumbnails(){const {width,height}=this.cameraState.output,w=180,h=Math.round(w*height/width);return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,w,h,'surface').toDataURL('image/png')}));}
   resize(){if(this.dragBefore)this.interruptPoseDrag();const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{const half=(this.camera.top-this.camera.bottom)/2;this.camera.left=-half*w/h;this.camera.right=half*w/h;}this.camera.updateProjectionMatrix();}
-  private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)&&now-this.motionNotify>100){this.motionNotify=now;this.update(false);}if(!this.fly.active)this.orbit.update();this.renderer.render(this.scene,this.camera);};
+  // Damping is disabled; OrbitControls updates on its own pan/zoom events.
+  // Updating it on idle frames would nudge exact top/bottom cameras off-axis.
+  private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)&&now-this.motionNotify>100){this.motionNotify=now;this.update(false);}this.renderer.render(this.scene,this.camera);};
   dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
 }

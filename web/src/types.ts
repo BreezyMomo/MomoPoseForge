@@ -13,8 +13,8 @@ export const DEFAULT_VIEWS: ViewSlot[] = [
   { id: 'front', name: '正面', azimuth: 0, elevation: 0 },
   { id: 'oblique', name: '斜侧', azimuth: 45, elevation: 0 },
   { id: 'side', name: '侧面', azimuth: 90, elevation: 0 },
-  { id: 'high', name: '俯视', azimuth: 0, elevation: 45 },
-  { id: 'low', name: '仰视', azimuth: 0, elevation: -30 },
+  { id: 'high', name: '斜俯视', azimuth: 0, elevation: 45 },
+  { id: 'low', name: '斜仰视', azimuth: 0, elevation: -30 },
 ];
 export type Pin = { position: Vec3; quaternion: Quat; orientation: boolean; sole?:import('./footContacts').SoleContact };
 export type PoseDocument = {

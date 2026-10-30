@@ -15,6 +15,7 @@ import {validSceneProps} from './sceneProps';
 import {validSymmetry} from './symmetry';
 import {validAppearance} from './characterAppearance';
 import {validSoleContact} from './footContacts';
+import {normalizeViewNames} from './viewDirections';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -56,7 +57,8 @@ export function parseDocument(text:string,rest:PoseDocument,definition:RigDefini
   if(Object.keys(d.pins).some(k=>!rig.contacts.includes(k)))throw new Error('包含未知的固定部位');
   for(const map of [d.targets,d.poles])if(Object.keys(map).some(k=>!rig.chains[k]))throw new Error('包含未知的 IK 控制点');
   if(d.selection!==undefined&&(!rig.editableJoints.includes(d.selection)))throw new Error('选中关节不属于当前骨架');
-  if(!Array.isArray(d.views)||d.views.length!==5||d.views.some((v,i)=>!record(v)||v.id!==DEFAULT_VIEWS[i].id||typeof v.name!=='string'||v.name.length>30||!Number.isFinite(v.azimuth)||Math.abs(v.azimuth)>360||!Number.isFinite(v.elevation)||Math.abs(v.elevation)>89))throw new Error('五视图相机设置无效');
+  if(!Array.isArray(d.views)||d.views.length!==5||d.views.some((v,i)=>!record(v)||v.id!==DEFAULT_VIEWS[i].id||typeof v.name!=='string'||v.name.length>30||!Number.isFinite(v.azimuth)||Math.abs(v.azimuth)>360||!Number.isFinite(v.elevation)||Math.abs(v.elevation)>90))throw new Error('五视图相机设置无效');
+  d.views=normalizeViewNames(d.views);
   if(!record(d.hands)||!handShapeValid(d.hands.Left)||!handShapeValid(d.hands.Right)||typeof d.ground!=='boolean')throw new Error('手型或地面设置无效');
   if(d.fullBody!==undefined&&typeof d.fullBody!=='boolean')throw new Error('全身联动设置无效');
   if(d.symmetry!==undefined&&!validSymmetry(d.symmetry))throw new Error('实时对称设置无效');
