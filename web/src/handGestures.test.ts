@@ -54,7 +54,7 @@ describe('独立手势库及真实 X Bot 隔离',()=>{
 
 describe('手势库文件与旧工程兼容',()=>{
   const document=()=>handLibraryDocument([{...HAND_GESTURES[0],id:'local-hand',name:'杯柄预备'}]);
-  it('导出/导入不包含完整人体、相机、图片或另一只手，并返回独立数据',()=>{const source=document(),copy=parseHandLibrary(JSON.stringify(source));expect(copy).toEqual(source.gestures);copy[0].values.Index.curl[0]=40;expect(source.gestures[0].values.Index.curl[0]).toBe(0);expect(Object.keys(source)).toEqual(['format','version','rig','gestures']);});
+  it('导出/导入不包含完整人体、相机、图片或另一只手，并返回独立数据',()=>{const source=document(),copy=parseHandLibrary(JSON.stringify(source));expect(copy).toEqual(source.gestures);copy[0].values.Index.curl[0]=40;expect(source.gestures[0].values.Index.curl[0]).toBe(0);expect(Object.keys(source)).toEqual(['format','version','rig','rigVersion','gestures']);});
   it('拒绝错误版本、rig、超大文件、超量和重复编号，不接受非有限/越界角度',()=>{
     const invalid=[{...document(),version:2},{...document(),rig:'other-rig'},{...document(),gestures:Array(MAX_SAVED_HANDS+1).fill(document().gestures[0])},{...document(),gestures:[document().gestures[0],document().gestures[0]]},{...document(),gestures:[{...document().gestures[0],name:''}]}];for(const value of invalid)expect(()=>parseHandLibrary(JSON.stringify(value))).toThrow();expect(()=>parseHandLibrary('x'.repeat(150001))).toThrow('150 KB');
     for(const value of [NaN,Infinity,106,-11]){const v=structuredClone(HAND_GESTURES[0].values);v.Index.curl[1]=value;expect(validHandValues(v)).toBe(false);}const v=structuredClone(HAND_GESTURES[0].values);v.Thumb.spread=41;expect(validHandValues(v)).toBe(false);

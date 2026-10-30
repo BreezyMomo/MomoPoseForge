@@ -1,7 +1,7 @@
 import type { PoseDocument, ViewSlot } from './types';
-import { END_EFFECTORS, DEFAULT_VIEWS } from './types';
+import { DEFAULT_VIEWS } from './types';
 import type { PoseEngine } from './PoseEngine';
-import { CURRENT_MODEL } from './rig';
+import {requireRig,XBOT_RIG,REGISTERED_RIGS,type RigDefinition} from './rigs';
 import {PerspectiveCamera} from 'three';
 import {NORMAL_CONVENTION} from './renderPasses';
 import {BODY_NAMES,HAND_NAMES,handTolerance} from './poseOutput';
@@ -18,24 +18,41 @@ const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>ty
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
 const record=(x:unknown):x is Record<string,unknown>=>!!x&&typeof x==='object'&&!Array.isArray(x);
 
-export function parseDocument(text:string,rest:PoseDocument):PoseDocument{
+export function documentRig(text:string,registry:readonly RigDefinition[]=REGISTERED_RIGS){
+  if(text.length>2_000_000)throw new Error('工程文件过大');
+  let raw:unknown;try{raw=JSON.parse(text);}catch{throw new Error('JSON 格式无效，当前姿势未改变');}
+  if(!record(raw)||raw.format!=='momo-pose-forge'||raw.version!==1||typeof raw.rig!=='string')throw new Error('工程格式或版本不兼容');
+  const rig=registry.find(r=>r.id===raw.rig);if(!rig)throw new Error(`未安装骨架：${raw.rig}；当前姿势未改变`);
+  const version=raw.rigVersion??(rig.id===XBOT_RIG.id?1:undefined);
+  if(version!==rig.version)throw new Error('骨架版本不兼容；当前姿势未改变');
+  return rig;
+}
+
+export function parseDocument(text:string,rest:PoseDocument,definition:RigDefinition=requireRig(rest.rig)):PoseDocument{
   if(text.length>2_000_000)throw new Error('工程文件过大，请使用本站导出的姿态 JSON');
   let raw:unknown;try{raw=JSON.parse(text);}catch{throw new Error('JSON 格式无效，当前姿势未改变');}
   if(!record(raw)||raw.format!=='momo-pose-forge')throw new Error('这不是 MomoPoseForge 工程文件');
   if(raw.version!==1)throw new Error('工程版本不兼容，请使用 v1 工程');
-  if(raw.rig!==rest.rig)throw new Error('工程使用的人体版本与当前模型不同；原工程文件未修改');
+  const rig=documentRig(text,[definition]);
+  if(raw.rig!==rest.rig||(raw.rigVersion??1)!==(rest.rigVersion??1))throw new Error('工程使用的骨架与当前模型不同；原工程文件未修改');
   const d=raw as unknown as PoseDocument;
   if(typeof d.name!=='string'||d.name.length>80||!record(d.root)||!vector(d.root.position,3)||!quaternion(d.root.quaternion)||!record(d.joints)||!record(d.targets)||!record(d.poles)||!record(d.pins))throw new Error('工程结构或坐标无效');
   if(Object.keys(d.joints).length!==Object.keys(rest.joints).length)throw new Error('工程骨骼数量不匹配');
   for(const[name,base]of Object.entries(rest.joints)){
     const j=d.joints[name];if(!record(j)||!vector(j.position,3)||!quaternion(j.quaternion))throw new Error(`骨骼 ${name} 的数据无效`);
-    if(name!=='Hips'&&j.position.some((v,i)=>Math.abs(v-base.position[i])>.0001))throw new Error('工程中的骨段长度与当前人体不一致');
+    if(name!==rig.root&&j.position.some((v,i)=>Math.abs(v-base.position[i])>.0001))throw new Error('工程中的骨段长度与当前骨架不一致');
   }
-  for(const name of END_EFFECTORS){
-    if(!vector(d.targets[name],3)||!vector(d.poles[name],3))throw new Error('IK 控制点无效');
+  // The original Fox FK format had no IK controls. Preserve its joint pose and
+  // let the runtime derive targets from that pose after loading.
+  if(rig.ik&&d.ikVersion===undefined&&Object.keys(d.targets).length===0&&Object.keys(d.poles).length===0&&Object.keys(d.pins).length===0)d.targets=structuredClone(rest.targets);
+  if(d.ikVersion!==undefined&&(!rig.ik||d.ikVersion!==rig.ik.version))throw new Error('IK 控制版本不兼容');
+  for(const name of Object.keys(rig.chains)){
+    if(!vector(d.targets[name],3)||(!rig.ik||d.poles[name]!==undefined)&&!vector(d.poles[name],3))throw new Error('IK 控制点无效');
     const pin=d.pins[name];if(pin&&(!record(pin)||!vector(pin.position,3)||!quaternion(pin.quaternion)||typeof pin.orientation!=='boolean'))throw new Error('固定点数据无效');
   }
-  if(Object.keys(d.pins).some(k=>!END_EFFECTORS.includes(k as typeof END_EFFECTORS[number])))throw new Error('包含未知的固定部位');
+  if(Object.keys(d.pins).some(k=>!rig.contacts.includes(k)))throw new Error('包含未知的固定部位');
+  for(const map of [d.targets,d.poles])if(Object.keys(map).some(k=>!rig.chains[k]))throw new Error('包含未知的 IK 控制点');
+  if(d.selection!==undefined&&(!rig.editableJoints.includes(d.selection)))throw new Error('选中关节不属于当前骨架');
   if(!Array.isArray(d.views)||d.views.length!==5||d.views.some((v,i)=>!record(v)||v.id!==DEFAULT_VIEWS[i].id||typeof v.name!=='string'||v.name.length>30||!Number.isFinite(v.azimuth)||Math.abs(v.azimuth)>360||!Number.isFinite(v.elevation)||Math.abs(v.elevation)>89))throw new Error('五视图相机设置无效');
   if(!record(d.hands)||!handShapeValid(d.hands.Left)||!handShapeValid(d.hands.Right)||typeof d.ground!=='boolean')throw new Error('手型或地面设置无效');
   if(d.fullBody!==undefined&&typeof d.fullBody!=='boolean')throw new Error('全身联动设置无效');
@@ -54,6 +71,7 @@ export type ExportOptions={scope:'five'|'current';surface:boolean;skeleton:boole
 
 export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:AbortSignal,onProgress:(label:string)=>void){
   engine.fly?.stop();
+  const rig=engine.activeRig,human=rig.capabilities.openPose;
   const doc=engine.snapshot(),output=engine.getCameraSettings().output,w=options.width??options.resolution??output.width,h=options.height??(options.resolution?options.resolution*4/3:output.height);
   if(!validOutputSize(w,h))throw new Error('图片宽高须为 256 至 2048 的整数');
   const slots:ViewSlot[]=options.scope==='five'?structuredClone(engine.views):[(()=>{const d=engine.camera.position.clone().sub(engine.orbit.target).normalize();return{id:'current',name:'当前视角',azimuth:Math.atan2(d.x,d.z)*180/Math.PI,elevation:Math.asin(d.y)*180/Math.PI};})()];
@@ -64,14 +82,16 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
   try{
     for(let i=0;i<slots.length;i++){
       check();onProgress(`正在生成${slots[i].name} · ${i+1}/${slots.length}`);
-      const slot=slots[i],camera=cameras[i],frame=options.skeleton||options.keypoints?engine.openPose(camera,w,h,options.hideOccludedHands):undefined;
+      const slot=slots[i],camera=cameras[i],frame=human&&(options.skeleton||options.keypoints)?engine.openPose(camera,w,h,options.hideOccludedHands):undefined;
       const renderOptions={pose:frame,depthRange:range};
       if(options.surface||options.sheet){const canvas=engine.renderImage(slot,w,h,'surface',options.transparent,camera);images.push(canvas);if(options.surface)zip.file(`${slot.id}/mannequin.png`,await toBlob(canvas));}
-      if(options.skeleton){
+      if(options.skeleton&&!human)zip.file(`${slot.id}/skeleton.png`,await toBlob(engine.renderImage(slot,w,h,'skeleton',false,camera)));
+      if(options.skeleton&&human){
         zip.file(`${slot.id}/openpose-coco18.png`,await toBlob(engine.renderImage(slot,w,h,'body-skeleton',false,camera,renderOptions)));
         zip.file(`${slot.id}/openpose-body-hands.png`,await toBlob(engine.renderImage(slot,w,h,'skeleton',false,camera,renderOptions)));
       }
-      if(options.keypoints){
+      if(options.keypoints&&!human)zip.file(`${slot.id}/joints.json`,JSON.stringify(engine.genericSkeletonData(camera,w,h),null,2));
+      if(options.keypoints&&human){
         zip.file(`${slot.id}/keypoints-openpose.json`,JSON.stringify(frame,null,2));
         const legacy=structuredClone(frame!);legacy.people[0].hand_left_keypoints_2d=[];legacy.people[0].hand_right_keypoints_2d=[];
         zip.file(`${slot.id}/keypoints-coco18.json`,JSON.stringify(legacy,null,2));
@@ -92,12 +112,12 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
     }
     if(options.project)zip.file('project.pose.json',JSON.stringify(doc,null,2));
     if(options.keypoints)zip.file('skeleton-world.json',JSON.stringify(world,null,2));
-    if(options.skeleton||options.depth||options.normal){
+    if(human&&(options.skeleton||options.depth||options.normal)){
       const recipe=controlnetRecipe(slots.map(s=>s.id),options,options.scope==='current'&&engine.handDetail?{side:engine.handDetail,shape:engine.hands[engine.handDetail]}:undefined,{width:w,height:h});
       zip.file('workflow-controlnet.json',JSON.stringify(recipe,null,2));zip.file('tools/run-controlnet.py',runnerSource);zip.file('tools/requirements-controlnet.txt',requirementsSource);zip.file('workflows/controlnet-models.json',JSON.stringify(recipe.models,null,2));
     }
-    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.6.0',exportVersion:2,projectVersion:1,sceneProps:{count:doc.props?.length??0,visible:doc.props?.filter(p=>p.visible).length??0,renderedIn:['surface','depth','normal','mask'],skeleton:'human only'},referenceImage:{rendered:false,embeddedInProject:!!doc.referenceImage&&options.project},rig:doc.rig,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:'OpenPose COCO18 + 2 x HAND21',pointOrder:{body:BODY_NAMES,hand:HAND_NAMES},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:CURRENT_MODEL.name,modelLicense:CURRENT_MODEL.license},null,2));
-    zip.file('README.txt',[
+    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.6.0',exportVersion:2,projectVersion:1,sceneProps:{count:doc.props?.length??0,visible:doc.props?.filter(p=>p.visible).length??0,renderedIn:['surface','depth','normal','mask'],skeleton:'active rig only'},referenceImage:{rendered:false,embeddedInProject:!!doc.referenceImage&&options.project},rig:doc.rig,rigVersion:rig.version,width:w,height:h,channels:{surface:options.surface,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:human?'OpenPose COCO18 + 2 x HAND21':'momo-skeleton v1',pointOrder:human?{body:BODY_NAMES,hand:HAND_NAMES}:{joints:Object.keys(engine.bones)},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:human?{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}}:{joints:'retain valid occluded joints',projectionValidity:'explicit valid boolean; no human hand filtering'},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:rig.name,modelLicense:rig.license,...(rig.attribution?{modelAttribution:rig.attribution}:{})},null,2));
+    zip.file('README.txt',human?[
       'MomoPoseForge 姿态导出 v2','',
       '每个视角：mannequin.png 是素体参考；openpose-body-hands.png 是身体 COCO18 + 双手各21点的黑底骨架控制图。',
       'keypoints-openpose.json 使用 OpenPose 1.3 字段，像素坐标 x,y,c；每手从手腕开始，依次为拇指、食指、中指、无名指、小指，每指4点。',
@@ -113,7 +133,14 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       'project.pose.json 可重新打开编辑；contact-sheet.png 只用于整组查看，单视角工作流使用该视角目录内的独立图。',
       '场景道具为程序生成的椅子、桌子、方块或握杆；可见道具进入素体、深度、法线和 mask，骨架/关节点只含人体。道具位置、尺寸、朝向及显隐保存在工程中。',
       '角色资产：Adobe Mixamo X Bot，https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html 。','',
+    ].join('\n'):[
+      'MomoPoseForge 通用骨架导出',`骨架：${rig.name} / ${rig.id} v${rig.version}`,
+      'skeleton.png 和 joints.json 是此骨架的连接图与投影关节数据，不是人体 OpenPose。',
+      'skeleton-world.json 使用米制三维坐标，含关节名和父骨骼名；manifest.json 记录各相机矩阵。',
+      'mannequin.png 为素体图；depth.png 为近白远黑线性深度；normal.png 为相机空间表面法线；mask.png 白色为前景。',
+      '参考图不进入渲染；工程内可内嵌参考图。project.pose.json 可重新打开编辑。',
     ].join('\n'));
+    if(rig.attribution)zip.file('ASSET-CREDITS.txt',[rig.name,rig.attribution.authors,`Source: ${rig.attribution.source}`,`License: ${rig.license}`,rig.attribution.licenseUrl,`Changes: ${rig.attribution.changes}`].join('\n'));
     onProgress('正在打包文件');check();const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},()=>check());check();download(blob,`${safeName(doc.name)}.zip`);
   }finally{
     // Rendering does not edit the pose. Re-applying an unchanged snapshot would

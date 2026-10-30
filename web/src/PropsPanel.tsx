@@ -31,13 +31,13 @@ export function PropsPanel({engine,info,onNotify}:{engine:PoseEngine|null;info:E
         <div className="prop-fields">{[t('pose.widthFull'),t('pose.heightFull'),t('pose.depthFull')].map((axis,i)=><PropNumber key={`size-${prop.id}-${i}`} label={axis} value={prop.size[i]} min={.02} max={3} onChange={v=>vector('size',i,v)}/>)}</div>
         <PropNumber key={`yaw-${prop.id}`} label={t('pose.yaw')} value={prop.yaw} min={-180} max={180} step={5} onChange={v=>change({yaw:v})}/>
       </section>
-      <section className="inspector-section props-panel"><div className="section-label"><h2>{t('pose.contactHelp')}</h2><span>{t('pose.positionAndPin')}</span></div>
+      {engine?.humanoid&&engine.activeRig.capabilities.pins&&<section className="inspector-section props-panel"><div className="section-label"><h2>{t('pose.contactHelp')}</h2><span>{t('pose.positionAndPin')}</span></div>
         <label className="prop-select">{t('pose.part')}<select aria-label={t('pose.contactPart')} value={end} onChange={e=>setEnd(e.target.value as Effector)}>{END_EFFECTORS.map(e=><option key={e} value={e}>{partName(e)}{e.endsWith('Hand')?'腕':'底'}</option>)}</select></label>
         <label className="prop-select">{t('pose.contactPoint')}<select aria-label={t('pose.propContactPoint')} value={anchor?.id??''} onChange={e=>setAnchorId(e.target.value)}>{anchors.map(a=><option key={a.id} value={a.id}>{anchorName(prop.kind,a)}</option>)}</select></label>
         <button className="prop-contact" disabled={!info.ready||!prop.visible||!!engine?.pins[end]||prop.kind==='bar'&&end.endsWith('Foot')} onClick={()=>act(()=>{engine?.placeOnProp(prop.id,anchor!.id,end);onNotify(`${partName(end)}已定位并固定，可一步撤销`);})}>{end.endsWith('Hand')?t('pose.placeWrist'):t('pose.placeFoot')}</button>
         <button className="prop-unpin" disabled={!info.ready||!engine?.pins[end]} onClick={()=>act(()=>{engine?.select(end);engine?.setPin(false);})}>{t('pose.unpinPrefix')}{partName(end)}{t('pose.pinSuffix')}</button>
         <p className="field-help">{t('pose.propContactHelp')}</p>
-      </section>
+      </section>}
     </>}
   </>;
 }

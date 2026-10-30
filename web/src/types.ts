@@ -16,11 +16,11 @@ export const DEFAULT_VIEWS: ViewSlot[] = [
 ];
 export type Pin = { position: Vec3; quaternion: Quat; orientation: boolean };
 export type PoseDocument = {
-  format: 'momo-pose-forge'; version: 1; rig: string; name: string;
+  format: 'momo-pose-forge'; version: 1; rig: string; rigVersion?:number; ikVersion?:1; selection?:string; name: string;
   root: { position: Vec3; quaternion: Quat };
   joints: Record<string, { position: Vec3; quaternion: Quat }>;
   targets: Record<string, Vec3>; poles: Record<string, Vec3>;
-  pins: Partial<Record<Effector, Pin>>;
+  pins: Record<string, Pin|undefined>;
   hands: { Left: string; Right: string }; views: ViewSlot[]; ground: boolean; fullBody?:boolean;
   camera?:CameraSettings;
   referenceImage?:ReferenceImage;
@@ -52,7 +52,7 @@ export type FingerValues={curl:[number,number,number];spread:number};
 export type HandValues=Record<Digit,FingerValues>;
 export type EngineInfo = {
   ready: boolean; view: string; navigating:boolean; selected: string; position: Vec3; rotation: Vec3;
-  pinned: boolean; orientationPinned: boolean; ground: boolean; fullBody:boolean;fixedFeet:number;warning: string;
+  pinned: boolean; orientationPinned: boolean; ground: boolean; fullBody:boolean;fixedFeet:number;fixedContacts?:number;warning: string;
   hands: { Left: string; Right: string }; boneCount: number; vertexCount: number;
   handDetail:Side|null; fingers:Record<Side,HandValues>; forearmTwist:Record<Side,number>; toes:Record<Side,number>;
   camera?:CameraSettings; framingWarning?:string;

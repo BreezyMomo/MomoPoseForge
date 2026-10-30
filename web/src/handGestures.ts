@@ -1,7 +1,7 @@
 import {MathUtils,type Bone} from 'three';
 import {DIGITS,type FingerValues,type HandValues,type PoseDocument,type Side} from './types';
 import {emptyHandValues,FINGER_CURL_LIMITS,fingerAxes,fingerRotation} from './articulation';
-import {CURRENT_MODEL} from './rig';
+import {XBOT_RIG,type RigDefinition} from './rigs';
 
 export type HandGesture={id:string;name:string;values:HandValues};
 const finger=(curl:[number,number,number],spread=0):FingerValues=>({curl,spread});
@@ -22,7 +22,8 @@ export const HAND_GESTURES:HandGesture[]=[
   {id:'hook',name:'勾指',values:pose(finger([0,5,15],-25),finger([10,100,65]),closed(),closed(),closed())},
 ];
 export const MAX_SAVED_HANDS=24;
-export const HAND_LIBRARY_KEY=`momo-pose-forge:hand-library:${CURRENT_MODEL.rig}`;
+export const HAND_LIBRARY_KEY=`momo-pose-forge:hand-library:${XBOT_RIG.id}`;
+export function handLibraryKey(rig:RigDefinition){if(!rig.capabilities.hands)throw new Error('此骨架不支持手势');return `momo-pose-forge:hand-library:${rig.id}:v${rig.version}`;}
 export const handShapeValid=(name:unknown)=>typeof name==='string'&&(name==='自定义'||HAND_GESTURES.some(g=>g.name===name));
 
 export function validHandValues(value:unknown):value is HandValues{
@@ -38,11 +39,11 @@ export function writeHandValues(bones:Record<string,Bone>,rest:PoseDocument['joi
   // so its signed angle must flip on the right for one shared gesture definition.
   for(const d of DIGITS)for(let j=1;j<=3;j++)bones[`${side}${d}${j}`].quaternion.copy(fingerRotation(d,j,MathUtils.degToRad(values[d].curl[j-1]),MathUtils.degToRad(j===1?values[d].spread*(side==='Right'?-1:1):0),fingerAxes(rest,side,d,j,normalSign)));
 }
-export function handLibraryDocument(gestures:HandGesture[]){return {format:'momo-pose-forge-hand-library',version:1,rig:CURRENT_MODEL.rig,gestures};}
-export function parseHandLibrary(text:string):HandGesture[]{
+export function handLibraryDocument(gestures:HandGesture[],rig:RigDefinition=XBOT_RIG){if(!rig.capabilities.hands)throw new Error('此骨架不支持手势');return {format:'momo-pose-forge-hand-library',version:1,rig:rig.id,rigVersion:rig.version,gestures};}
+export function parseHandLibrary(text:string,rig:RigDefinition=XBOT_RIG):HandGesture[]{
   if(text.length>150_000)throw new Error('手势库超过 150 KB');
   let doc;try{doc=JSON.parse(text);}catch{throw new Error('手势库不是有效的 JSON 文件');}
-  if(!doc||doc.format!=='momo-pose-forge-hand-library'||doc.version!==1||doc.rig!==CURRENT_MODEL.rig||!Array.isArray(doc.gestures)||doc.gestures.length>MAX_SAVED_HANDS)throw new Error('手势库格式、人体版本或数量无效');
+  if(!rig.capabilities.hands||!doc||doc.format!=='momo-pose-forge-hand-library'||doc.version!==1||doc.rig!==rig.id||(doc.rigVersion??1)!==rig.version||!Array.isArray(doc.gestures)||doc.gestures.length>MAX_SAVED_HANDS)throw new Error('手势库格式、骨架版本或数量无效');
   const ids=new Set<string>();for(const g of doc.gestures){if(!g||typeof g.id!=='string'||!g.id.trim()||g.id.length>80||ids.has(g.id)||typeof g.name!=='string'||!g.name.trim()||g.name.length>40||/[\x00-\x1f]/.test(g.name)||!validHandValues(g.values))throw new Error('手势名称、指骨角度或编号无效');ids.add(g.id);}
   return structuredClone(doc.gestures);
 }

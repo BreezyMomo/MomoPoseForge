@@ -1,0 +1,14 @@
+{
+  "sourceSha256": "d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7",
+  "preparedSha256": "db0a79a6dde573d0bc5e06befcadebc55a21b8d1e703dc329e5dd47d39782455",
+  "units": "metres",
+  "sourceUnits": "original asset coordinates",
+  "scale": 0.01,
+  "sourceCommit": "4995a638c96dbc94376d3d6164e70fee3ac7f7a2",
+  "boneCount": 24,
+  "animations": [
+    "Survey",
+    "Walk",
+    "Run"
+  ]
+}
