@@ -66,13 +66,14 @@ describe('四爪编辑、固定与工程兼容',()=>{
     const {engine:e,state}=fixture();e.setFeetPin(true);const before=e.world(FOX_RIG.root);e.select(FOX_RIG.root);e.setSelectedPosition(1,before.y+.5);expect(e.world(FOX_RIG.root).y-before.y).toBeLessThan(.05);expect(errors(e).position).toBeLessThan(.001501);expect(e.warning).toContain('固定爪子');assertLimits(state,true);e.setFeetPin(false);expect(e.warning).toBe('');
     for(const bone of Object.values(e.bones))expect(bone.quaternion.toArray().every(Number.isFinite)).toBe(true);
   });
-  it('移动已固定的爪子会更新该锚点，其余锚点保持不动',()=>{
-    const {engine:e}=fixture();e.setFeetPin(true);const before=e.snapshot(),end=FOX_RIG.contacts[0];e.select(end);e.setSelectedPosition(1,e.world(end).y+.07);expect(e.pins[end]!.position[1]-before.pins[end]!.position[1]).toBeGreaterThan(.06);expect(errors(e).position).toBeLessThan(.0015);for(const other of FOX_RIG.contacts)if(other!==end)expect(e.pins[other]).toEqual(before.pins[other]);
+  it('固定爪子拒绝直接移动；解除选中爪后可移动且其他锚点保持不动',()=>{
+    const {engine:e}=fixture();e.setFeetPin(true);const end=FOX_RIG.contacts[0];e.select(end);const before=e.snapshot();e.setSelectedPosition(1,e.world(end).y+.07);expect(e.snapshot()).toEqual(before);expect(e.warning).toContain('固定');
+    e.setPin(false);const y=e.world(end).y;e.setSelectedPosition(1,y+.07);expect(e.world(end).y-y).toBeGreaterThan(.06);expect(errors(e).position).toBeLessThan(.0015);for(const other of FOX_RIG.contacts)if(other!==end)expect(e.pins[other]).toEqual(before.pins[other]);
   });
-  it('头尾 FK 精调与固定爪子可以并用，爪子旋转也可以更新固定朝向',()=>{
+  it('头尾 FK 精调与固定爪子可以并用，固定方向后禁止爪子直接旋转',()=>{
     const {engine:e}=fixture();e.setFeetPin(true);const before=e.snapshot();e.select('b_Head_05');e.setSelectedRotation(1,20);e.select('b_Tail01_012');e.setSelectedRotation(1,35);expect(e.info().rotation[1]).toBeCloseTo(35);expect(errors(e).position).toBeLessThan(.0015);
     for(const[name,bone]of Object.entries(e.bones))if(!['b_Head_05','b_Tail01_012'].includes(name))expect(bone.quaternion.toArray()).toEqual(before.joints[name].quaternion);
-    const end=FOX_RIG.contacts[0];e.select(end);e.setPin(true,true);e.setSelectedRotation(1,10);expect(errors(e).orientation).toBeLessThan(.009);
+    const end=FOX_RIG.contacts[0];e.select(end);e.setPin(true,true);const pinned=e.snapshot();e.setSelectedRotation(1,10);expect(e.snapshot()).toEqual(pinned);expect(errors(e).orientation).toBeLessThan(.009);
   });
   it('同一次拖动的路径和重复事件不会累积扭转，取消时恢复全部状态',()=>{
     const {engine:e}=fixture(),end=FOX_RIG.contacts[2];e.select(end);const before=e.snapshot(),start=e.world(end),drag=e as unknown as {dragBefore:typeof before;manipulate():void};drag.dragBefore=before;

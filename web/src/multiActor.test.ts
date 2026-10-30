@@ -35,6 +35,18 @@ function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreater
 function importedClip(e:PoseEngine){const root=e.rest.joints.Hips.position,id='c'.repeat(64),clip=new AnimationClip('Owned clip',1,[...Object.entries(e.rest.joints).map(([n,j])=>new QuaternionKeyframeTrack(`${n}.quaternion`,[0,1],[...j.quaternion,...j.quaternion])),new VectorKeyframeTrack('Hips.position',[0,1],[...root,...root])]);Object.assign(clip,{uuid:`${XBOT_RIG.id}@1:${id}:0:v1`});clip.userData={momoMotion:{assetId:id,fileName:'owned.fbx',format:'fbx',rig:XBOT_RIG.id,rigVersion:1,adapterVersion:1,sampleRate:30,root:'Hips',rootOrigin:root,mappedBones:20,ignoredTranslations:0,reference:'skin-bind'}};return clip;}
 
 describe('独立场景角色与原控制器',()=>{
+  for(const rig of [XBOT_RIG,FOX_RIG])it(`${rig.id}固定末端禁止拖动和数值移动；方向固定禁止旋转，解除后恢复且无空历史`,async()=>{
+    const e=withRealHandles(fixture(rig)),end=(rig.supportContacts??rig.contacts)[0];(e as any).syncGizmo=(PoseEngine.prototype as any).syncGizmo;
+    e.transform.attach=vi.fn();e.transform.detach=vi.fn();e.setFeetPin(true);e.select(end);if(!e.pins[end]!.orientation)e.setPin(true,true);
+    const before=e.snapshot();vi.mocked(e.onCommit).mockClear();expect(e.canTranslate()).toBe(false);expect(e.canRotateAxis(0)).toBe(false);expect(e.transform.enabled).toBe(false);
+    for(const mode of ['translate','rotate'] as const){e.mode=mode;(e as any).beginPoseDrag();e.gizmo.position.y+=.07;e.gizmo.quaternion.setFromAxisAngle(new Vector3(1,0,0),.3);expect((e as any).manipulate()).toBe(false);(e as any).finishPoseDrag();expect(e.snapshot()).toEqual(before);}
+    e.setSelectedPosition(1,e.world(end).y+.07);e.setSelectedRotation(0,30);e.resetSelected();expect(e.snapshot()).toEqual(before);expect(e.onCommit).not.toHaveBeenCalled();
+    e.setPin(false);expect(e.canTranslate()).toBe(true);expect(e.info().fixedContacts).toBe((rig.supportContacts??rig.contacts).length-1);e.setMode('translate');expect(e.transform.enabled).toBe(true);vi.mocked(e.onCommit).mockClear();
+    const y=e.world(end).y;e.setSelectedPosition(1,y+.04);expect(e.world(end).y-y).toBeGreaterThan(.035);expect(e.onCommit).toHaveBeenCalledOnce();
+    const first=e.info().activeActor!,firstPose=actor(e).pose;await e.duplicateActor();e.setFeetPin(false);expect(actor(e,first).pose).toEqual(firstPose);
+    await e.addActor(rig===XBOT_RIG?FOX_RIG:XBOT_RIG);e.setFeetPin(true);const scene=e.sceneSnapshot();await e.restoreScene(readSceneDocument(JSON.stringify(scene)),{},false);expect(e.sceneSnapshot()).toEqual(scene);
+    e.selectActor(first);e.select((rig.supportContacts??rig.contacts)[1]);expect(e.canTranslate()).toBe(false);const saved=e.sceneSnapshot();e.setSelectedPosition(1,e.world(e.selected).y+.1);expect(e.sceneSnapshot()).toEqual(saved);e.openPose(camera(),512,512,false);e.sceneJoints(camera(),512,512);expect(e.sceneSnapshot()).toEqual(saved);
+  });
   it('平脚、前掌和自由模式接入真实骨骼；改变骨盆仍保持两处脚底支撑',()=>{
     const e=withRealHandles(fixture());e.applyPreset(XBOT_RIG.presets.find(p=>p.id==='neutral')??XBOT_RIG.presets[0]);
     e.setFootContact('LeftFoot','flat');e.setFootContact('RightFoot','ball',35);

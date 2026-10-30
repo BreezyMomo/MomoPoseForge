@@ -86,8 +86,8 @@ describe('肩髋约束与受约束全身联动',()=>{
     for(const name of Object.keys(a.bones)){expect(a.bones[name].position.distanceTo(b.bones[name].position),name).toBeLessThan(1e-8);expect(a.bones[name].quaternion.angleTo(b.bones[name].quaternion),name).toBeLessThan(1e-6);}assertPins(a);
   });
   it('四个固定末端同时存在时，躯干调整不会让固定点累积漂移',()=>{
-    const e=fixture();pin(e,END_EFFECTORS);Object.assign(e,{dragBefore:e.snapshot()});const target=e.world('Chest');
-    for(let i=0;i<25;i++){move(e,'Chest',target.clone().add(new Vector3(.04*Math.sin(i*.2),-.06,.06)));assertPins(e);assertLimits(e);}
+    const e=fixture();pin(e,END_EFFECTORS);Object.assign(e,{dragBefore:e.snapshot()});const target=e.world('Chest'),pins=structuredClone(e.pins);
+    for(let i=0;i<25;i++){move(e,'Chest',target.clone().add(new Vector3(.04*Math.sin(i*.2),-.06,.06)));assertPins(e);assertLimits(e);expect(e.pins).toEqual(pins);expect(e.selected).toBe('Chest');}
   });
   it('地面约束开启时，贴地脚成为临时支撑，关闭联动后可单独移动骨盆',()=>{
     const e=fixture(),left=e.world('LeftFoot'),right=e.world('RightFoot');move(e,'Hips',e.world('Hips').add(new Vector3(0,-.2,.08)));
@@ -111,8 +111,9 @@ describe('肩髋约束与受约束全身联动',()=>{
     const e=fixture(preset);pin(e);const target=e.world('Chest');Object.assign(e,{dragBefore:e.snapshot()});
     for(let i=0;i<24;i++){move(e,'Chest',target.clone().add(new Vector3(.06*Math.sin(i*.2),-.08,.08*Math.sin(i*.15))));assertPins(e);assertLimits(e);}
   });
-  it('固定手掌的数值旋转可以更新固定方向，重置肩部也遵守其他固定点',()=>{
-    const e=fixture();pin(e,END_EFFECTORS);const before=e.bones.LeftHand.getWorldQuaternion(new Quaternion());e.selected='LeftHand';e.setSelectedRotation(0,30);assertPins(e);expect(e.bones.LeftHand.getWorldQuaternion(new Quaternion()).angleTo(before)).toBeGreaterThan(.2);
+  it('固定手掌方向后拒绝数值旋转，解除方向固定后可旋转且位置不变',()=>{
+    const e=fixture();pin(e,END_EFFECTORS);const before=e.bones.LeftHand.getWorldQuaternion(new Quaternion()),pins=structuredClone(e.pins);e.selected='LeftHand';e.setSelectedRotation(0,30);assertPins(e);expect(e.bones.LeftHand.getWorldQuaternion(new Quaternion()).angleTo(before)).toBeLessThan(1e-7);expect(e.pins).toEqual(pins);
+    e.setPin(true,false);e.setSelectedRotation(0,30);assertPins(e);expect(e.bones.LeftHand.getWorldQuaternion(new Quaternion()).angleTo(before)).toBeGreaterThan(.2);expect(e.pins.LeftHand!.position).toEqual(pins.LeftHand!.position);
     e.selected='LeftShoulder';e.setSelectedRotation(2,30);e.resetSelected();assertPins(e);assertLimits(e);
   });
   it('连续越过单臂边界时不会突然跳到另一姿态，并记录求解开销',()=>{
