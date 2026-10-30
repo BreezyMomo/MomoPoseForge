@@ -68,6 +68,8 @@ export const POSE_MESSAGES:Record<string,[string,string]>={
  'pose.savedEmptyTitle':['保留你的下一个好动作','Keep your next good pose'],'pose.savedEmptyHelp':['调整姿势后收藏，随时从这里继续。','Save an edited pose and continue from here anytime.'],'pose.help':['操作帮助','Controls help'],
  'pose.moveShortcut':['移动 · W','Move · W'],'pose.move':['移动','Move'],'pose.rotateShortcut':['旋转 · E','Rotate · E'],'pose.rotate':['旋转','Rotate'],
  'pose.mirrorTitle':['沿人体对称面镜像','Mirror across the body plane'],'pose.mirror':['镜像','Mirror'],'pose.neutral':['重置为中立站姿','Reset to neutral stance'],
+ 'pose.lineartBackground':['线稿模式使用纯白背景','Line art uses a plain white background'],
+ 'pose.lineartDisplay':['线稿显示','Line art display'],'pose.lineart':['线稿','Line art'],'pose.lineartFile':['白模线稿图','White model line art'],'pose.lineartHint':['PNG · 白模、黑色轮廓与遮挡线','PNG · White model with silhouette and occlusion contours'],'pose.lineWidth':['线条粗细','Line width'],
  'pose.surfaceDisplay':['素体显示','Surface display'],'pose.surface':['素体','Surface'],'pose.skeletonDisplay':['骨架显示','Skeleton display'],'pose.skeleton':['骨架','Skeleton'],
  'pose.reload':['重新载入','Reload'],'pose.loading':['正在准备角色与骨骼','Preparing character and skeleton'],'pose.loadingHelp':['载入可编辑的蒙皮素体','Loading editable skinned character'],
  'pose.fullBody':['返回全身','Return to full body'],'pose.reference':['参考图片对姿','Reference image'],'pose.camera':['相机与画幅','Camera and output'],'pose.focusShortcut':['聚焦角色 · F','Focus character · F'],

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export type DepthRange={near:number;far:number};
-export type RenderKind='surface'|'skeleton'|'body-skeleton'|'depth'|'normal'|'mask';
+export type RenderKind='surface'|'lineart'|'skeleton'|'body-skeleton'|'depth'|'normal'|'mask';
 export type DataKind='depth'|'normal'|'mask'|'visibility';
 export const NORMAL_CONVENTION={space:'camera',cameraAxes:{x:'right',y:'up',z:'towards viewer'},encoding:'RGB = 0.5 * (-Nx, Ny, Nz) + 0.5',protocol:'ControlNet 1.1 Normal / ScanNet visualization',colorSpace:'linear data, no tone mapping or sRGB transfer',background:[0,0,0]};
 export function depthRangeFor(box:THREE.Box3,cameras:THREE.Camera[]):DepthRange{

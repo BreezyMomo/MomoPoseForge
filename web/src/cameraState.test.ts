@@ -239,3 +239,13 @@ describe('相机、工程与五视图构图',()=>{
     for(const aspect of [.125,1,8]){const restored=restoreCamera(pose,aspect);expect(restored.getWorldDirection(new Vector3()).distanceTo(c.getWorldDirection(new Vector3()))).toBeLessThan(1e-12);const p=target.clone().project(restored);expect(Math.abs(p.x)+Math.abs(p.y)).toBeLessThan(1e-12);expect(new Quaternion().fromArray(pose.quaternion).length()).toBeCloseTo(1,12);}
   });
 });
+
+describe('线稿共享设置',()=>{
+  it('旧相机配置仍有效，线宽随工程恢复且拒绝非法值',async()=>{
+    expect(validateCameraSettings(defaultCameraSettings())).toBe(true);
+    const e=await fixture(),joints=e.snapshot().joints;e.setLineWidth(2.25);
+    const doc=parseDocument(JSON.stringify(e.snapshot()),e.rest);expect(doc.camera?.lineArt).toEqual({lineWidth:2.25});expect(doc.joints).toEqual(JSON.parse(JSON.stringify(joints)));expect(e.snapshot().joints).toEqual(joints);
+    for(const lineWidth of [NaN,Infinity,0,3.1])expect(validateCameraSettings({...e.getCameraSettings(),lineArt:{lineWidth}})).toBe(false);
+    e.setLineWidth(NaN);expect(e.getCameraSettings().lineArt?.lineWidth).toBe(2.25);
+  });
+});

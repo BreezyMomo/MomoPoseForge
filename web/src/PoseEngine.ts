@@ -18,6 +18,7 @@ import {emptyHandValues,fingerPart,fingerAxes,fingerAngles,fingerRotation,forear
 import {LIMB_LIMITS,constrainLimb,limbAxes} from './limbLimits';
 import {LOCAL_AXES,solveConstrainedIK,captureJoints,restoreJoints,interpolateJoints,goalError,type PositionGoal,type SolverJoint} from './fullBodyIK';
 import {COCO_LINKS,COCO_COLORS,HAND_LINKS,handBones,projectPose,paintSkeleton,worldSkeleton,depthVisibility,type OpenPoseFrame} from './poseOutput';
+import {LineArtRenderer} from './LineArtRenderer';
 import {depthRangeFor,dataMaterial,type DepthRange,type RenderKind,type DataKind} from './renderPasses';
 import {defaultCameraSettings,captureCamera,restoreCamera,validOutputSize,type CameraSettings} from './cameraState';
 import {validateReferenceImage,referenceWithSettings,type ReferenceImage,type ReferenceSettings} from './referenceImage';
@@ -78,7 +79,8 @@ export class PoseEngine {
   lastSolveStats={iterations:0,error:0,fixedError:0,milliseconds:0};
   selected = 'LeftHand';
   mode: 'translate' | 'rotate' = 'translate';
-  display: 'surface' | 'skeleton' = 'surface';
+  display: 'surface' | 'skeleton' | 'lineart' = 'surface';
+  private lineArt?:LineArtRenderer;
   view = 'free';
   warning = '';
   ready = false;
@@ -331,7 +333,7 @@ export class PoseEngine {
     if(!this.actors)return;this.stashActor();
     for(const slot of this.actors.values()){
       const s=slot.state;for(const group of [s.model,s.helpers,s.boneDisplay])if(group.parent!==this.scene)this.scene.add(group);
-      s.model.userData.actorId=slot.id;s.model.visible=slot.visible&&this.display==='surface';
+      s.model.userData.actorId=slot.id;s.model.visible=slot.visible&&this.display!=='skeleton';
       s.helpers.visible=slot.id===this.activeActorId&&slot.visible&&!slot.locked&&!s.motion?.active&&!this.actorTransform;
       if(slot.id===this.activeActorId)this.usingActor(slot,()=>this.syncHandles());
       s.boneDisplay.visible=slot.visible&&this.display==='skeleton';if(rebuildSkeleton&&s.boneDisplay.visible)this.usingActor(slot,()=>this.updateSkeletonDisplay());
@@ -785,7 +787,7 @@ export class PoseEngine {
     this.camera=new THREE.PerspectiveCamera(this.cameraState.fov,this.host.clientWidth/Math.max(1,this.host.clientHeight),.01,100);
     this.camera.position.copy(center).addScaledVector(direction,.52);this.camera.lookAt(center);this.orbit.object=this.camera;this.orbit.target.copy(center);this.transform.camera=this.camera;this.orbit.update();this.commitCamera();
   }
-  setDisplay(mode:'surface'|'skeleton'){this.display=mode;this.model.visible=mode==='surface';this.boneDisplay.visible=mode==='skeleton';this.refreshActors(true);this.update(false);}
+  setDisplay(mode:'surface'|'skeleton'|'lineart'){this.display=mode;this.model.visible=mode!=='skeleton';this.boneDisplay.visible=mode==='skeleton';this.refreshActors(true);this.update(false);}
   setGrid(value:boolean){this.grid.visible=value;}
   setGround(value:boolean){if(!this.activeRig.capabilities.floor)return;this.ground=value;this.commit();}
   setFullBody(value:boolean){if(!this.activeRig.capabilities.fullBodyIK)return;this.fullBody=value;this.update(false);this.commit();}
@@ -1279,10 +1281,10 @@ export class PoseEngine {
   }
 
   private paintGenericSkeleton(ctx:CanvasRenderingContext2D,data:ReturnType<PoseEngine['genericSkeletonData']>,width:number){const points=new Map(data.joints.map(j=>[j.name,j]));ctx.strokeStyle='#d8bb77';ctx.fillStyle='#d8bb77';ctx.lineWidth=Math.max(2,width/160);for(const j of data.joints){const p=j.parent?points.get(j.parent):undefined;if(p?.valid&&j.valid){ctx.beginPath();ctx.moveTo(...p.image as [number,number]);ctx.lineTo(...j.image as [number,number]);ctx.stroke();}if(j.valid){ctx.beginPath();ctx.arc(...j.image as [number,number],Math.max(3,width/180),0,Math.PI*2);ctx.fill();}}}
-  private renderPixels(camera:THREE.Camera,width:number,height:number,kind:'surface'|DataKind,transparent=false,range:DepthRange={near:.01,far:10}){
+  private renderPixels(camera:THREE.Camera,width:number,height:number,kind:'surface'|'lineart'|DataKind,transparent=false,range:DepthRange={near:.01,far:10}){
     this.stashActor();const actorVisibility=[...(this.actors?.values()??[])].flatMap(a=>[a.state.model,a.state.helpers,a.state.boneDisplay].map(object=>({object,visible:object.visible})));
     const prev={background:this.scene.background,override:this.scene.overrideMaterial,model:this.model.visible,helpers:this.helpers.visible,gizmo:this.transform.getHelper().visible,grid:this.grid.visible,ground:this.groundMesh.visible,bones:this.boneDisplay.visible,target:this.renderer.getRenderTarget(),alpha:this.renderer.getClearAlpha(),toneMapping:this.renderer.toneMapping};
-    const data=kind!=='surface',material=data?dataMaterial(kind,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,range):null;
+    const data=kind!=='surface'&&kind!=='lineart',material=data?dataMaterial(kind as DataKind,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,range):null;
     const target=new THREE.WebGLRenderTarget(width,height,{samples:data?0:4});target.texture.colorSpace=data?THREE.NoColorSpace:THREE.SRGBColorSpace;
     const debug=this.renderer.debug,previousShaderError=debug?.onShaderError;
     try{
@@ -1290,7 +1292,7 @@ export class PoseEngine {
       this.scene.background=data?new THREE.Color(0):transparent?null:new THREE.Color('#e7e8e5');this.scene.overrideMaterial=material;if(data)this.renderer.toneMapping=THREE.NoToneMapping;
       this.helpers.visible=false;this.transform.getHelper().visible=false;this.grid.visible=false;this.boneDisplay.visible=false;this.model.visible=true;this.groundMesh.visible=false;
       for(const a of this.actors?.values()??[]){a.state.model.visible=a.visible;a.state.helpers.visible=false;a.state.boneDisplay.visible=false;}
-      this.renderer.setClearAlpha(data?1:transparent?0:1);this.renderer.setRenderTarget(target);this.renderer.render(this.scene,camera);
+      this.renderer.setClearAlpha(data?1:transparent?0:1);this.renderer.setRenderTarget(target);if(kind==='lineart')this.renderLineArt(camera,target,width,height,transparent);else this.renderer.render(this.scene,camera);
       const buffer=new Uint8Array(width*height*4);this.renderer.readRenderTargetPixels(target,0,0,width,height,buffer);
       return buffer;
     }finally{
@@ -1298,12 +1300,30 @@ export class PoseEngine {
       this.scene.background=prev.background;this.scene.overrideMaterial=prev.override;this.model.visible=prev.model;this.helpers.visible=prev.helpers;this.transform.getHelper().visible=prev.gizmo;this.grid.visible=prev.grid;this.groundMesh.visible=prev.ground;this.boneDisplay.visible=prev.bones;this.renderer.setRenderTarget(prev.target);this.renderer.setClearAlpha(prev.alpha);this.renderer.toneMapping=prev.toneMapping;if(debug)debug.onShaderError=previousShaderError;target.dispose();material?.dispose();
     }
   }
+  setLineWidth(width:number){if(!Number.isFinite(width))return;this.cameraState.lineArt={lineWidth:THREE.MathUtils.clamp(width,.5,3)};this.commitCamera();}
+  private renderLineArt(camera:THREE.Camera,target:THREE.WebGLRenderTarget|null,width:number,height:number,transparent=false){
+    this.lineArt??=new LineArtRenderer();this.lineArt.render(this.renderer,this.scene,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,target,width,height,transparent,this.cameraState.lineArt?.lineWidth??1.25);
+  }
+  private renderLineArtViewport(){
+    const actors=[...(this.actors?.values()??[])],geometry=actors.length?actors.map(a=>a.state.model):[this.model];
+    if(this.propLayer)geometry.push(this.propLayer);
+    const overlays=[this.helpers,this.boneDisplay,this.grid,this.groundMesh,this.transform.getHelper(),...actors.flatMap(a=>[a.state.helpers,a.state.boneDisplay])];
+    const visibility=[...new Set([...overlays,...geometry])].map(object=>({object,visible:object.visible}));
+    const background=this.scene.background,autoClear=this.renderer.autoClear;
+    try{
+      overlays.forEach(o=>o.visible=false);const size=this.renderer.getDrawingBufferSize(new THREE.Vector2());
+      this.renderLineArt(this.camera,null,size.x,size.y);
+      visibility.forEach(v=>v.object.visible=v.visible);geometry.forEach(o=>o.visible=false);
+      // The composition writes the original surface depth, so edit handles retain occlusion.
+      this.grid.visible=false;this.groundMesh.visible=false;this.scene.background=null;this.renderer.autoClear=false;this.renderer.render(this.scene,this.camera);
+    }finally{visibility.forEach(v=>v.object.visible=v.visible);this.scene.background=background;this.renderer.autoClear=autoClear;}
+  }
   exportCamera(aspect:number){return cloneExportCamera(this.camera,aspect);}
-  renderCurrent(width:number,height:number,kind:'surface'|'skeleton',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
+  renderCurrent(width:number,height:number,kind:'surface'|'skeleton'|'lineart',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
   getThumbnails(){const {width,height}=this.cameraState.output,w=180,h=Math.round(w*height/width);return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,w,h,'surface').toDataURL('image/png')}));}
   resize(){if(this.dragBefore)this.interruptPoseDrag();const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{const half=(this.camera.top-this.camera.bottom)/2;this.camera.left=-half*w/h;this.camera.right=half*w/h;}this.camera.updateProjectionMatrix();}
   // Damping is disabled; OrbitControls updates on its own pan/zoom events.
   // Updating it on idle frames would nudge exact top/bottom cameras off-axis.
-  private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)&&now-this.motionNotify>100){this.motionNotify=now;this.update(false);}this.renderer.render(this.scene,this.camera);};
-  dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
+  private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)&&now-this.motionNotify>100){this.motionNotify=now;this.update(false);}if(this.display==='lineart')this.renderLineArtViewport();else this.renderer.render(this.scene,this.camera);};
+  dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.lineArt?.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
 }

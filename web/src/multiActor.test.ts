@@ -35,6 +35,15 @@ function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreater
 function importedClip(e:PoseEngine){const root=e.rest.joints.Hips.position,id='c'.repeat(64),clip=new AnimationClip('Owned clip',1,[...Object.entries(e.rest.joints).map(([n,j])=>new QuaternionKeyframeTrack(`${n}.quaternion`,[0,1],[...j.quaternion,...j.quaternion])),new VectorKeyframeTrack('Hips.position',[0,1],[...root,...root])]);Object.assign(clip,{uuid:`${XBOT_RIG.id}@1:${id}:0:v1`});clip.userData={momoMotion:{assetId:id,fileName:'owned.fbx',format:'fbx',rig:XBOT_RIG.id,rigVersion:1,adapterVersion:1,sampleRate:30,root:'Hips',rootOrigin:root,mappedBones:20,ignoredTranslations:0,reference:'skin-bind'}};return clip;}
 
 describe('独立场景角色与原控制器',()=>{
+  it('线稿显示切换不改动同骨架多实例或混合角色，线宽属于共享场景并可恢复',async()=>{
+    const e=fixture();await e.duplicateActor();await e.addActor(FOX_RIG);e.camera=camera();const actors=e.sceneSnapshot().actors;
+    for(const mode of ['lineart','skeleton','surface','lineart'] as const){e.setDisplay(mode);expect(e.sceneSnapshot().actors).toEqual(actors);for(const a of (e as any).actors.values())expect(a.state.model.visible).toBe(mode!=='skeleton');}
+    e.setLineWidth(2);const saved=e.sceneSnapshot();expect(saved.camera?.lineArt?.lineWidth).toBe(2);
+    await e.restoreScene(readSceneDocument(JSON.stringify(saved)),{},false);expect(e.sceneSnapshot()).toEqual(saved);expect(e.display).toBe('lineart');
+    e.openPose(camera(),512,512,false);e.sceneJoints(camera(),512,512);expect(e.sceneSnapshot()).toEqual(saved);
+    const first=e.info().actors![0].id;e.selectActor(first);const others=e.sceneSnapshot().actors.filter(a=>a.id!==first);await e.replaceActorRig(FOX_RIG);await e.replaceActorRig(XBOT_RIG);expect(e.sceneSnapshot().actors.filter(a=>a.id!==first)).toEqual(others);expect(e.getCameraSettings().lineArt?.lineWidth).toBe(2);
+  });
+
   it('同种多实例与人体狐狸混合场景共用顶视/底视，保存恢复及多人导出保持姿势独立',async()=>{
     const e=fixture();await e.duplicateActor();await e.addActor(FOX_RIG);const bodies=e.sceneSnapshot().actors;
     e.setViewDirection('high','top');e.setViewDirection('low','bottom');const before=e.sceneSnapshot();expect(before.actors).toEqual(bodies);
