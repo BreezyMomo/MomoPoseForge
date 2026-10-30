@@ -2,6 +2,7 @@ export type Vec3 = [number, number, number];
 export type Quat = [number, number, number, number];
 import type {CameraSettings} from './cameraState';
 import type {ReferenceImage} from './referenceImage';
+import type {SymmetrySettings} from './symmetry';
 import type {SceneProp} from './sceneProps';
 export const END_EFFECTORS = ['LeftHand', 'RightHand', 'LeftFoot', 'RightFoot'] as const;
 export type Effector = typeof END_EFFECTORS[number];
@@ -24,6 +25,7 @@ export type PoseDocument = {
   camera?:CameraSettings;
   referenceImage?:ReferenceImage;
   props?:SceneProp[];
+  symmetry?:SymmetrySettings;
 };
 export type Preset = {
   id: string; name: string; category: string; description: string;
@@ -56,4 +58,5 @@ export type EngineInfo = {
   camera?:CameraSettings; framingWarning?:string;
   referenceImage?:ReferenceImage;
   props?:SceneProp[];
+  symmetry?:SymmetrySettings;
 };

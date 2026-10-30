@@ -1,0 +1,113 @@
+{
+  "switchDoesNotChangePose": true,
+  "dragChangedJoints": [
+    "LeftArm",
+    "LeftForeArm",
+    "LeftHand",
+    "RightArm",
+    "RightForeArm",
+    "RightHand"
+  ],
+  "handsPreserved": true,
+  "pinsPreserved": true,
+  "rootPreserved": true,
+  "cameraPreserved": true,
+  "undoMaximumJointComponentDifference": 2.220446049250313e-16,
+  "redoMaximumJointComponentDifference": 2.7755575615628914e-16,
+  "switchesAfterUndo": {
+    "arms": true,
+    "legs": false
+  },
+  "arms": {
+    "maximumEndpointMirrorErrorMillimetres": 0.0005630509885714433,
+    "maximumLocalRotationMirrorErrorDegrees": 0
+  },
+  "legs": {
+    "maximumEndpointMirrorErrorMillimetres": 0.01784006442020377,
+    "maximumLocalRotationMirrorErrorDegrees": 0
+  },
+  "fixedPointConflictSnapshotIdentical": true,
+  "legEditChangedJoints": [
+    "LeftUpLeg",
+    "LeftLeg",
+    "LeftFoot",
+    "RightUpLeg",
+    "RightLeg",
+    "RightFoot"
+  ],
+  "legEditPreservesArms": true,
+  "refreshRestoredBothSwitches": true,
+  "invalidImportPreservesProject": true,
+  "oldProjectDisablesBothSwitches": true,
+  "responsive": [
+    {
+      "closeButton": {
+        "bottom": 139.5,
+        "height": 18,
+        "left": 331,
+        "right": 359,
+        "top": 121.5,
+        "width": 28,
+        "x": 331,
+        "y": 121.5
+      },
+      "height": 844,
+      "scrollHeight": 844,
+      "scrollWidth": 390,
+      "switches": [
+        {
+          "bottom": 507.390625,
+          "checked": true,
+          "top": 491.390625
+        },
+        {
+          "bottom": 546.390625,
+          "checked": true,
+          "top": 530.390625
+        }
+      ],
+      "width": 390
+    },
+    {
+      "height": 1024,
+      "scrollHeight": 1024,
+      "scrollWidth": 768,
+      "switches": [
+        {
+          "bottom": 599.390625,
+          "checked": true,
+          "top": 583.390625
+        },
+        {
+          "bottom": 638.390625,
+          "checked": true,
+          "top": 622.390625
+        }
+      ],
+      "width": 768
+    },
+    {
+      "height": 900,
+      "scrollHeight": 900,
+      "scrollWidth": 1440,
+      "switches": [
+        {
+          "bottom": 515.390625,
+          "checked": true,
+          "top": 499.390625
+        },
+        {
+          "bottom": 554.390625,
+          "checked": true,
+          "top": 538.390625
+        }
+      ],
+      "width": 1440
+    }
+  ],
+  "inspectionLimit": {
+    "canvasApi": "undefined",
+    "headingTop": 64,
+    "treeWalkerApi": "undefined"
+  }
+}

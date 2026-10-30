@@ -1,0 +1,10 @@
+{
+  "views": 5,
+  "files": 48,
+  "width": 1024,
+  "height": 1024,
+  "keypointMaximumErrorPixels": 0.000488472787765204,
+  "fixedPoints": 2,
+  "fixedPointMaximumErrorMillimetres": 6.071532165918825e-15,
+  "fixedDirectionMaximumErrorDegrees": 0
+}
