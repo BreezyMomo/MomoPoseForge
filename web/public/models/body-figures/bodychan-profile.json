@@ -6,5 +6,74 @@
   "sourceSha256": "d01efc62cf39aee85b6cefb4f12ae229297cebd5fab27da03e6ce5f4bc1683af",
   "heightMetres": 1.68,
   "sourceVertices": 15466,
-  "conversion": "Rigify deformation weights collapsed to 53 anatomical FK joints; original proportions retained; plain clay material; no scripts, constraints or animations."
+  "conversion": "Rigify deformation weights collapsed to 53 anatomical FK joints; knee pivots fitted to source spherical joints and knee caps rigidly weighted to thighs; original mesh proportions and FK bind axes retained; plain clay material; no scripts, constraints or animations.",
+  "rigCalibrationVersion": 1,
+  "legacyPositions": {
+    "left_shin": [
+      8.789356797933578e-09,
+      0.4168310761451721,
+      -5.413312464952469e-09
+    ],
+    "left_foot": [
+      1.2456439435482025e-08,
+      0.4513283669948578,
+      -2.3283064365386963e-10
+    ],
+    "right_shin": [
+      -8.789356797933578e-09,
+      0.4168310761451721,
+      -5.413312464952469e-09
+    ],
+    "right_foot": [
+      -1.2456439435482025e-08,
+      0.4513283669948578,
+      -2.3283064365386963e-10
+    ]
+  },
+  "kneeHinges": {
+    "left_shin": {
+      "axis": [
+        0.711931049823761,
+        0.048377979546785355,
+        0.7005810141563416
+      ],
+      "min": 0,
+      "max": 151.8938079766301,
+      "straight": 1.8938079766300946
+    },
+    "right_shin": {
+      "axis": [
+        0.711931049823761,
+        -0.048377979546785355,
+        -0.7005810141563416
+      ],
+      "min": 0,
+      "max": 151.8938079766301,
+      "straight": 1.8938079766300946
+    }
+  },
+  "kneeCaps": {
+    "left_shin": {
+      "mesh": "Thighs_surface",
+      "center": [
+        0.07957719266414642,
+        0.5300386548042297,
+        -0.015645768493413925
+      ],
+      "radius": 0.03937649466398952,
+      "weightJoint": "left_thigh",
+      "sourcePivotErrorMetres": 0.03237064119401419
+    },
+    "right_shin": {
+      "mesh": "Thighs_surface",
+      "center": [
+        -0.07957719266414642,
+        0.5300386548042297,
+        -0.015645768493413925
+      ],
+      "radius": 0.03937649466398952,
+      "weightJoint": "right_thigh",
+      "sourcePivotErrorMetres": 0.03237064119401419
+    }
+  }
 }

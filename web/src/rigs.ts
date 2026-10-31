@@ -1,10 +1,10 @@
-import type {Vec3, Preset} from './types';
+import type {Vec3, Preset,Side,Digit} from './types';
 import {PART_NAMES, END_EFFECTORS} from './types';
 import {PRESETS} from './presets';
 import {FOX_RIG} from './foxRig';
 import {BODYCHAN_RIG,BODYKUN_RIG} from './bodyFigureRigs';
 
-export type RigJointControl={name:string;label:string;labelEn:string;limits?:[Vec3,Vec3];hinge?:0|1|2;ikHinge?:{axis:Vec3;min:number;max:number}};
+export type RigJointControl={name:string;label:string;labelEn:string;limits?:[Vec3,Vec3];hinge?:0|1|2;ikHinge?:{axis:Vec3;min:number;max:number;straight?:number}};
 export type RigJoint=RigJointControl&{parent:string|null;position:Vec3};
 export type RigDefinition={
   id:string;version:number;name:string;nameEn:string;description:string;descriptionEn:string;
@@ -13,6 +13,11 @@ export type RigDefinition={
   sourceUrl:string;license:string;editableJoints:readonly string[];
   appearances?:readonly {id:string;name:string;nameEn:string;url:string}[];
   motionImport?:'mixamo-human-v1';
+  handSkeleton?:Record<Side,{wrist:string;digits:Record<Digit,[string,string,string]>}>;
+  figureHeight?:number;
+  calibration?:{version:number;legacyVersions?:readonly number[];legacyPositions:Readonly<Record<string,Vec3>>;chains:readonly string[]};
+  bendControls?:Readonly<Record<string,Vec3>>;
+  drawingGuides?:{head:string;pelvis:string;chest:string;leftShoulder:string;rightShoulder:string};
   jointControls?:readonly RigJointControl[];
   attribution?:{authors:string;source:string;licenseUrl:string;changes:string};
   chains:Readonly<Record<string,readonly string[]>>;
@@ -42,6 +47,8 @@ export const XBOT_RIG:RigDefinition={
   asset:{kind:'gltf',url:'/models/xbot.glb',profileUrl:'/models/xbot-profile.json'},sourceUrl:'/models/XBOT-ASSET.md',license:'Adobe Mixamo terms',
   editableJoints:Object.keys(PART_NAMES),chains:{LeftHand:['LeftArm','LeftForeArm','LeftHand'],RightHand:['RightArm','RightForeArm','RightHand'],LeftFoot:['LeftUpLeg','LeftLeg','LeftFoot'],RightFoot:['RightUpLeg','RightLeg','RightFoot']},
   contacts:END_EFFECTORS,supportContacts:['LeftFoot','RightFoot'],supportOrientation:true,mirrorPairs:Object.keys(PART_NAMES).filter(n=>n.startsWith('Left')).map(n=>[n,n.replace('Left','Right')] as const),
+  bendControls:{LeftHand:[0,-1,-1],RightHand:[0,-1,-1],LeftFoot:[0,0,1],RightFoot:[0,0,1]},
+  drawingGuides:{head:'Head',pelvis:'Hips',chest:'Chest',leftShoulder:'LeftArm',rightShoulder:'RightArm'},
   capabilities:{hands:true,fullBodyIK:true,pins:true,floor:true,mirror:true,openPose:true,partialPresets:true},presets:PRESETS,
 };
 
@@ -52,6 +59,17 @@ export const YBOT_RIG:RigDefinition={
   asset:{kind:'gltf',url:'/models/ybot.glb',profileUrl:'/models/ybot-profile.json'},
   sourceUrl:'/models/YBOT-ASSET.md',soles:undefined,
   attribution:{authors:'Adobe Mixamo (character); MULUALEM-TEKLE (source glTF conversion)',source:'https://github.com/MULUALEM-TEKLE/IK-test/tree/404fe4a8791d1f8847cc92ef913685014dc52047/public',licenseUrl:'https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html',changes:'Original Y Bot surface, joint materials and skin weights retained. Normalized to 1.8 m and a canonical identity-rest humanoid skeleton, with an added UpperChest control layer. No source animations included. Head OpenPose anchors are geometric estimates; X Bot sole-contact calibration is not reused.'},
+};
+
+// Original surface and independently specified proportions on the canonical
+// human topology. Sole contact is not calibrated for this new bare foot.
+export const DRAWING_FEMALE_RIG:RigDefinition={
+  ...XBOT_RIG,id:'momo-drawing-female-v1',name:'绘画女素体 · 原型',nameEn:'Drawing female · Prototype',
+  description:'原创圆润素体、连续腰胯蒙皮、人体 IK 与手势',descriptionEn:'Original rounded figure, continuous torso skin, human IK and hands',
+  asset:{kind:'gltf',url:'/models/drawing-mannequin/drawing-female.glb',profileUrl:'/models/drawing-mannequin/drawing-female-profile.json'},
+  sourceUrl:'/models/drawing-mannequin/README.md',license:'Original MomoPoseForge procedural geometry',
+  motionImport:undefined,soles:undefined,attribution:undefined,
+  calibration:{version:2,legacyVersions:[1],legacyPositions:{HeadTop_End:[0,.24,0]},chains:[]},
 };
 
 const joint=(name:string,parent:string|null,position:Vec3,label:string,labelEn:string,limits?:[Vec3,Vec3]):RigJoint=>({name,parent,position,label,labelEn,limits});
@@ -79,8 +97,8 @@ export const BASIC_HUMAN_RIG:RigDefinition={
   presets:[{id:'neutral',name:'中立姿态',category:'基础',description:'恢复基础人形的 T 形静止姿态'}],
 };
 export const RIGS:readonly RigDefinition[]=[XBOT_RIG,YBOT_RIG,FOX_RIG,BODYCHAN_RIG,BODYKUN_RIG];
-// Old basic-human projects remain readable without keeping the test asset in the picker.
-export const REGISTERED_RIGS:readonly RigDefinition[]=[...RIGS,BASIC_HUMAN_RIG];
+// Withdrawn prototypes remain readable in saved projects without appearing in the picker.
+export const REGISTERED_RIGS:readonly RigDefinition[]=[...RIGS,BASIC_HUMAN_RIG,DRAWING_FEMALE_RIG];
 export function findRig(id:string){return REGISTERED_RIGS.find(r=>r.id===id);}
 export function rigOptions(active:RigDefinition){return RIGS.some(r=>r.id===active.id)?RIGS:[...RIGS,active];}
 export function requireRig(id:string){const rig=findRig(id);if(!rig)throw new Error(`未安装骨架：${id}；当前姿势未改变`);return rig;}

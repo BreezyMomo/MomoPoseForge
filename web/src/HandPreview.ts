@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import type {PoseEngine} from './PoseEngine';
 import type {HandValues,Side} from './types';
-import {writeHandValues} from './handGestures';
+import {writeRigHand,handBone,fingerBone} from './handRig';
 
 export function cloneHandRig(engine:Pick<PoseEngine,'model'|'rest'>){
   const model=clone(engine.model),bones:Record<string,THREE.Bone>={};model.visible=true;
@@ -28,11 +28,11 @@ export class HandPreview {
   }
   render(side:Side,values:HandValues){
     if(this.disposed)throw new Error('手势预览已关闭');
-    writeHandValues(this.bones,this.engine.rest.joints,side,values);this.model.updateMatrixWorld(true);
-    const hand=this.bones[`${side}Hand`],origin=hand.getWorldPosition(new THREE.Vector3()),rotation=hand.getWorldQuaternion(new THREE.Quaternion());
+    const rig=this.engine.activeRig;writeRigHand(rig,this.model,this.bones,this.engine.rest,side,values,this.engine.handNormalSign);this.model.updateMatrixWorld(true);
+    const hand=this.bones[handBone(rig,side)],origin=hand.getWorldPosition(new THREE.Vector3());
     // Use a fixed rest-hand frame for all gestures, so their size is comparable.
-    const along=new THREE.Vector3().fromArray(this.engine.rest.joints[`${side}Middle1`].position).normalize().applyQuaternion(rotation);
-    const index=this.bones[`${side}Index1`].getWorldPosition(new THREE.Vector3()).sub(origin),little=this.bones[`${side}Little1`].getWorldPosition(new THREE.Vector3()).sub(origin);
+    const along=this.bones[fingerBone(rig,side,'Middle',1)].getWorldPosition(new THREE.Vector3()).sub(origin).normalize();
+    const index=this.bones[fingerBone(rig,side,'Index',1)].getWorldPosition(new THREE.Vector3()).sub(origin),little=this.bones[fingerBone(rig,side,'Little',1)].getWorldPosition(new THREE.Vector3()).sub(origin);
     const palmNormal=new THREE.Vector3().crossVectors(index,little).normalize().multiplyScalar(side==='Left'?-1:1),center=origin.clone().addScaledVector(along,.09);
     const camera=new THREE.OrthographicCamera(-.12,.12,.14,-.14,.01,3);camera.up.copy(along);camera.position.copy(center).addScaledVector(palmNormal,.6).addScaledVector(along,.08);camera.lookAt(center);camera.updateMatrixWorld(true);
     this.renderer.render(this.scene,camera);return this.renderer.domElement.toDataURL('image/webp',.87);

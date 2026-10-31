@@ -26,6 +26,9 @@ async function fixture(){
 }
 const matrix=(e:PoseEngine)=>e.camera.matrixWorld.toArray();
 describe('斜角与垂直上下视图',()=>{
+  it('结构辅助线设置可选且严格校验，不影响旧工程',()=>{
+    const state=defaultCameraSettings();expect(validateCameraSettings(state)).toBe(true);state.lineArt={lineWidth:1.5,constructionGuides:true};expect(validateCameraSettings(state)).toBe(true);expect(validateCameraSettings({...state,lineArt:{lineWidth:1.5,constructionGuides:'true'}})).toBe(false);
+  });
   it('顶视/底视在各方位角精确沿 Y 轴观察，画面朝上方向稳定且矩阵无奇异值',async()=>{
     const e=await fixture();
     for(const elevation of [90,-90])for(const azimuth of [0,45,90,180,-90]){

@@ -7,8 +7,46 @@ import bpy
 import hashlib
 import json
 import sys
+import struct
+import tempfile
+import math
+import numpy as np
 from pathlib import Path
-from mathutils import Vector
+from mathutils import Vector, Matrix, Quaternion
+
+
+def islands(mesh):
+    adjacency = [set() for _ in mesh.data.vertices]
+    for edge in mesh.data.edges:
+        a, b = edge.vertices
+        adjacency[a].add(b)
+        adjacency[b].add(a)
+    remaining = set(range(len(adjacency)))
+    while remaining:
+        seed = remaining.pop()
+        part, stack = {seed}, [seed]
+        while stack:
+            for index in adjacency[stack.pop()] & remaining:
+                remaining.remove(index)
+                part.add(index)
+                stack.append(index)
+        yield sorted(part)
+
+
+def gltf_joints(path, names):
+    data = path.read_bytes()
+    size = struct.unpack_from('<I', data, 12)[0]
+    doc = json.loads(data[20:20 + size])
+    parents = {child: i for i, node in enumerate(doc['nodes']) for child in node.get('children', [])}
+    worlds = {}
+    def world(index):
+        if index not in worlds:
+            node = doc['nodes'][index]
+            q = node.get('rotation', [0, 0, 0, 1])
+            local = Matrix.LocRotScale(Vector(node.get('translation', [0, 0, 0])), Quaternion((q[3], *q[:3])), Vector(node.get('scale', [1, 1, 1])))
+            worlds[index] = world(parents[index]) @ local if index in parents else local
+        return worlds[index]
+    return {node['name']: {'position': node.get('translation', [0, 0, 0]), 'world': world(i)} for i, node in enumerate(doc['nodes']) if node.get('name') in names}
 
 source, output = map(Path, sys.argv[sys.argv.index('--') + 1:])
 output.mkdir(parents=True, exist_ok=True)
@@ -23,6 +61,31 @@ for variant, original_name, height in [('bodychan', 'rig', 1.68), ('bodykun', 'b
     scale = height / (top - bottom)
     def point(p):
         return Vector((p.x * scale, p.y * scale, (p.z - bottom) * scale))
+
+    # Rigify's knee heads are ~3 cm in front of the actual mechanical balls.
+    # Fit the source's closed spherical mesh islands, independently for each leg.
+    knee_caps = {}
+    for side, short in [('left', 'L'), ('right', 'R')]:
+        old = point(original.matrix_world @ original.data.bones[f'DEF-shin.{short}'].head_local)
+        candidates = []
+        for mesh in meshes:
+            for indices in islands(mesh):
+                if len(indices) < 100:
+                    continue
+                positions = np.array([point(mesh.matrix_world @ mesh.data.vertices[i].co)[:] for i in indices])
+                low, high = positions.min(axis=0), positions.max(axis=0)
+                extent = high - low
+                if extent.min() <= .02 or extent.max() / extent.min() > 1.03:
+                    continue
+                center = np.linalg.lstsq(np.column_stack((2 * positions, np.ones(len(positions)))), (positions * positions).sum(axis=1), rcond=None)[0][:3]
+                radius = np.linalg.norm(positions - center, axis=1).mean()
+                residual = np.abs(np.linalg.norm(positions - center, axis=1) - radius).max()
+                distance = (Vector(center) - old).length
+                if distance < .06 and residual < .001:
+                    candidates.append((distance, mesh.name, indices, Vector(center), float(radius)))
+        assert candidates, f'No knee ball found for {variant}/{side}'
+        _, mesh_name, indices, center, radius = min(candidates, key=lambda candidate: candidate[0])
+        knee_caps[side] = {'mesh': mesh_name, 'indices': indices, 'center': center, 'radius': radius, 'offset': (center - old).length}
 
     # Collapse Rigify bendy segments and palm helpers into anatomical FK joints.
     # Preserve source proportions; this is an asset conversion, not an X Bot pose map.
@@ -74,6 +137,7 @@ for variant, original_name, height in [('bodychan', 'rig', 1.68), ('bodykun', 'b
     node.inputs['Base Color'].default_value = (.58, .56, .52, 1)
     node.inputs['Roughness'].default_value = .8
     vertex_count = 0
+    exported_meshes = {}
     for src in meshes:
         mesh = bpy.data.objects.new(src.name + '_surface', src.data.copy())
         scene.collection.objects.link(mesh)
@@ -100,9 +164,47 @@ for variant, original_name, height in [('bodychan', 'rig', 1.68), ('bodykun', 'b
         mesh.parent = armature
         modifier = mesh.modifiers.new('FigureSkin', 'ARMATURE')
         modifier.object = armature
+        exported_meshes[src.name] = mesh
         vertex_count += len(mesh.data.vertices)
+    # Capture the exact old local translations for an explicit document migration.
+    with tempfile.TemporaryDirectory(prefix='poseforge-figure-calibration-') as temporary:
+        legacy_path = Path(temporary) / 'legacy.glb'
+        bpy.ops.export_scene.gltf(filepath=str(legacy_path), export_format='GLB', export_animations=False, use_active_scene=True, export_yup=True, export_extras=False)
+        legacy = gltf_joints(legacy_path, definitions)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='EDIT')
+    for side, cap in knee_caps.items():
+        bone = armature.data.edit_bones[f'{side}_shin']
+        delta = cap['center'] - bone.head
+        bone.head += delta
+        bone.tail += delta  # Translation only: keep the historical FK bind axes.
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for side, cap in knee_caps.items():
+        mesh = exported_meshes[cap['mesh']]
+        for group in mesh.vertex_groups:
+            group.remove(cap['indices'])
+        mesh.vertex_groups[f'{side}_thigh'].add(cap['indices'], 1, 'REPLACE')
+    bpy.context.view_layer.update()
     bpy.ops.export_scene.gltf(filepath=str(output / f'{variant}.glb'), export_format='GLB', export_animations=False, use_active_scene=True, export_yup=True, export_extras=False)
-    manifest = {'id': f'momo-{variant}-fk', 'version': 1, 'rigVersion': 1, 'units': 'metres', 'sourceSha256': source_hash, 'heightMetres': height, 'sourceVertices': vertex_count, 'conversion': 'Rigify deformation weights collapsed to 53 anatomical FK joints; original proportions retained; plain clay material; no scripts, constraints or animations.'}
+    manifest = {'id': f'momo-{variant}-fk', 'version': 1, 'rigVersion': 1, 'units': 'metres', 'sourceSha256': source_hash, 'heightMetres': height, 'sourceVertices': vertex_count, 'conversion': 'Rigify deformation weights collapsed to 53 anatomical FK joints; knee pivots fitted to source spherical joints and knee caps rigidly weighted to thighs; original mesh proportions and FK bind axes retained; plain clay material; no scripts, constraints or animations.'}
+    corrected = gltf_joints(output / f'{variant}.glb', definitions)
+    changed = [name for name in definitions if (Vector(legacy[name]['position']) - Vector(corrected[name]['position'])).length > .00001]
+    assert set(changed) == {'left_shin', 'right_shin', 'left_foot', 'right_foot'}, changed
+    hinges, caps = {}, {}
+    for side, cap in knee_caps.items():
+        thigh, shin, foot = [corrected[f'{side}_{joint}']['world'] for joint in ['thigh', 'shin', 'foot']]
+        upper = (shin.translation - thigh.translation).normalized()
+        lower = (foot.translation - shin.translation).normalized()
+        axis = upper.cross(lower).normalized()
+        if axis.x < 0:
+            axis.negate()
+        bend = math.degrees(math.atan2(axis.dot(upper.cross(lower)), upper.dot(lower)))
+        local_axis = shin.to_quaternion().inverted() @ axis
+        hinges[f'{side}_shin'] = {'axis': list(local_axis.normalized()), 'min': min(0, -bend), 'max': 150 - bend, 'straight': -bend}
+        center = [cap['center'].x, cap['center'].z, -cap['center'].y]
+        assert (shin.translation - Vector(center)).length < .00001
+        caps[f'{side}_shin'] = {'mesh': cap['mesh'] + '_surface', 'center': center, 'radius': cap['radius'], 'weightJoint': f'{side}_thigh', 'sourcePivotErrorMetres': cap['offset']}
+    manifest.update({'rigCalibrationVersion': 1, 'legacyPositions': {name: legacy[name]['position'] for name in changed}, 'kneeHinges': hinges, 'kneeCaps': caps})
     (output / f'{variant}-profile.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     print(f'EXPORTED {variant}: {vertex_count} vertices, {len(definitions)} joints, scale={scale}')
 

@@ -3,7 +3,7 @@ import type {Vec3,Quat} from './types';
 
 export type CameraPose={projection:'perspective'|'orthographic';position:Vec3;target:Vec3;quaternion:Quat;up:Vec3;fov:number;verticalSpan:number;zoom:number;near:number;far:number};
 export type CameraBookmark={id:string;name:string;camera:CameraPose};
-export type CameraSettings={lineArt?:{lineWidth:number};locked:boolean;fov:number;view:string;active:CameraPose;framing:{locked:boolean;center:Vec3;verticalSpan:number};bookmarks:CameraBookmark[];output:{width:number;height:number}};
+export type CameraSettings={lineArt?:{lineWidth:number;constructionGuides?:boolean};locked:boolean;fov:number;view:string;active:CameraPose;framing:{locked:boolean;center:Vec3;verticalSpan:number};bookmarks:CameraBookmark[];output:{width:number;height:number}};
 export const FRAME_PRESETS=[{name:'竖幅 · 3:4',width:768,height:1024},{name:'方形 · 1:1',width:1024,height:1024},{name:'横幅 · 4:3',width:1024,height:768},{name:'宽屏 · 16:9',width:1536,height:864},{name:'高清竖幅',width:1536,height:2048}];
 export const validOutputSize=(width:number,height:number)=>Number.isInteger(width)&&Number.isInteger(height)&&width>=256&&height>=256&&width<=2048&&height<=2048;
 export function defaultCameraSettings():CameraSettings{
@@ -27,7 +27,7 @@ export function validateCameraPose(p:unknown):p is CameraPose{
 }
 export function validateCameraSettings(c:unknown):c is CameraSettings{
   if(!record(c)||typeof c.locked!=='boolean'||!finite(c.fov,15,100)||typeof c.view!=='string'||!['free','front','oblique','side','high','low'].includes(c.view)||!validateCameraPose(c.active)||!record(c.framing)||typeof c.framing.locked!=='boolean'||!vec(c.framing.center,3)||!finite(c.framing.verticalSpan,.05,50)||!record(c.output)||!validOutputSize(c.output.width as number,c.output.height as number)||!Array.isArray(c.bookmarks)||c.bookmarks.length>12)return false;
-  if(c.lineArt!==undefined&&(!record(c.lineArt)||!finite(c.lineArt.lineWidth,.5,3)))return false;
+  if(c.lineArt!==undefined&&(!record(c.lineArt)||!finite(c.lineArt.lineWidth,.5,3)||c.lineArt.constructionGuides!==undefined&&typeof c.lineArt.constructionGuides!=='boolean'))return false;
   const ids=new Set<string>();
   return c.bookmarks.every(b=>{if(!record(b)||typeof b.id!=='string'||!b.id.trim()||b.id.length>80||ids.has(b.id)||typeof b.name!=='string'||!b.name.trim()||b.name.length>30||!validateCameraPose(b.camera))return false;ids.add(b.id);return true;});
 }

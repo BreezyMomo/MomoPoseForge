@@ -18,7 +18,7 @@ export const DEFAULT_VIEWS: ViewSlot[] = [
 ];
 export type Pin = { position: Vec3; quaternion: Quat; orientation: boolean; sole?:import('./footContacts').SoleContact };
 export type PoseDocument = {
-  format: 'momo-pose-forge'; version: 1; rig: string; rigVersion?:number; ikVersion?:1; selection?:string; name: string;
+  format: 'momo-pose-forge'; version: 1; rig: string; rigVersion?:number; rigCalibrationVersion?:number; ikVersion?:1; selection?:string; name: string;
   root: { position: Vec3; quaternion: Quat };
   joints: Record<string, { position: Vec3; quaternion: Quat }>;
   targets: Record<string, Vec3>; poles: Record<string, Vec3>;

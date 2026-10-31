@@ -16,6 +16,7 @@ import {validSymmetry} from './symmetry';
 import {validAppearance} from './characterAppearance';
 import {validSoleContact} from './footContacts';
 import {normalizeViewNames} from './viewDirections';
+import {usesLegacyCalibration} from './rigCalibration';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -41,9 +42,12 @@ export function parseDocument(text:string,rest:PoseDocument,definition:RigDefini
   const d=raw as unknown as PoseDocument;
   if(typeof d.name!=='string'||d.name.length>80||!record(d.root)||!vector(d.root.position,3)||!quaternion(d.root.quaternion)||!record(d.joints)||!record(d.targets)||!record(d.poles)||!record(d.pins))throw new Error('工程结构或坐标无效');
   if(Object.keys(d.joints).length!==Object.keys(rest.joints).length)throw new Error('工程骨骼数量不匹配');
+  const legacy=usesLegacyCalibration(d,rig);
+  if(d.rigCalibrationVersion!==undefined&&d.rigCalibrationVersion!==rig.calibration?.version&&!legacy)throw new Error('骨架校准版本不兼容');
   for(const[name,base]of Object.entries(rest.joints)){
     const j=d.joints[name];if(!record(j)||!vector(j.position,3)||!quaternion(j.quaternion))throw new Error(`骨骼 ${name} 的数据无效`);
-    if(name!==rig.root&&j.position.some((v,i)=>Math.abs(v-base.position[i])>.0001))throw new Error('工程中的骨段长度与当前骨架不一致');
+    const expected=legacy?rig.calibration!.legacyPositions[name]??base.position:base.position;
+    if(name!==rig.root&&j.position.some((v,i)=>Math.abs(v-expected[i])>.0001))throw new Error(`工程中的骨段长度与当前骨架不一致（${name}）`);
   }
   // Legacy FK projects had no IK controls. Preserve its joint pose and
   // let the runtime derive targets from that pose after loading.
@@ -73,12 +77,12 @@ export function download(blob:Blob,name:string){const link=document.createElemen
 export const safeName=(name:string)=>name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g,'-').slice(0,64)||'pose';
 export function saveProject(doc:PoseDocument){download(new Blob([JSON.stringify(doc,null,2)],{type:'application/json'}),`${safeName(doc.name)}.pose.json`);}
 const toBlob=(c:HTMLCanvasElement)=>new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('图片生成失败')),'image/png'));
-export type ExportOptions={scope:'five'|'current';surface:boolean;lineart?:boolean;skeleton:boolean;keypoints:boolean;depth:boolean;normal:boolean;sheet:boolean;project:boolean;resolution?:768|1536;width?:number;height?:number;transparent:boolean;hideOccludedHands:boolean};
+export type ExportOptions={scope:'five'|'current';surface:boolean;lineart?:boolean;guides?:boolean;skeleton:boolean;keypoints:boolean;depth:boolean;normal:boolean;sheet:boolean;project:boolean;resolution?:768|1536;width?:number;height?:number;transparent:boolean;hideOccludedHands:boolean};
 
 export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:AbortSignal,onProgress:(label:string)=>void){
   if(engine.motion?.active)throw new Error('请先取姿或返回原姿势，再导出');
   engine.fly?.stop();
-  const rig=engine.activeRig,human=engine.hasHumanActors?.()??rig.capabilities.openPose,actors=engine.actorList?.()??[],multi=actors.length>1,scene=actors.length?engine.sceneSnapshot():undefined;
+  const rig=engine.activeRig,guides=!!options.guides&&(engine.hasDrawingGuideActors?.()??!!engine.activeRig.drawingGuides),human=engine.hasHumanActors?.()??rig.capabilities.openPose,actors=engine.actorList?.()??[],multi=actors.length>1,scene=actors.length?engine.sceneSnapshot():undefined;
   if(actors.length&&!actors.some(a=>a.visible)&&!engine.props?.some(p=>p.visible))throw new Error('场景中没有可见角色或道具');
   const appearance=engine.appearance,customAppearance=!!appearance&&!rig.appearances?.some(a=>a.id===appearance.id);
   const doc=engine.snapshot(),output=engine.getCameraSettings().output,w=options.width??options.resolution??output.width,h=options.height??(options.resolution?options.resolution*4/3:output.height);
@@ -95,6 +99,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       const renderOptions={pose:frame,depthRange:range,humanOnly:true};
       if(options.surface||options.sheet){const canvas=engine.renderImage(slot,w,h,'surface',options.transparent,camera);images.push(canvas);if(options.surface)zip.file(`${slot.id}/mannequin.png`,await toBlob(canvas));}
       if(options.lineart)zip.file(`${slot.id}/lineart.png`,await toBlob(engine.renderImage(slot,w,h,'lineart',options.transparent,camera)));
+      if(guides)zip.file(`${slot.id}/construction-guides.png`,await toBlob(engine.renderImage(slot,w,h,'guides',true,camera)));
       if(options.skeleton&&(!human||multi))zip.file(`${slot.id}/skeleton.png`,await toBlob(engine.renderImage(slot,w,h,'skeleton',false,camera)));
       if(options.skeleton&&human){
         zip.file(`${slot.id}/openpose-coco18.png`,await toBlob(engine.renderImage(slot,w,h,'body-skeleton',false,camera,renderOptions)));
@@ -127,10 +132,10 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       const recipe=controlnetRecipe(slots.map(s=>s.id),options,options.scope==='current'&&engine.handDetail?{side:engine.handDetail,shape:engine.hands[engine.handDetail]}:undefined,{width:w,height:h});
       zip.file('workflow-controlnet.json',JSON.stringify(recipe,null,2));zip.file('tools/run-controlnet.py',runnerSource);zip.file('tools/requirements-controlnet.txt',requirementsSource);zip.file('workflows/controlnet-models.json',JSON.stringify(recipe.models,null,2));
     }
-    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.7.0',exportVersion:3,projectVersion:1,sceneVersion:scene?1:undefined,actors,sceneProps:{count:doc.props?.length??0,visible:doc.props?.filter(p=>p.visible).length??0,renderedIn:['surface','lineart','depth','normal','mask'],skeleton:'active rig only'},referenceImage:{rendered:false,embeddedInProject:!!doc.referenceImage&&options.project},rig:doc.rig,rigVersion:rig.version,width:w,height:h,channels:{surface:options.surface,lineart:!!options.lineart,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:human?'OpenPose COCO18 + 2 x HAND21':'momo-skeleton v1',pointOrder:human?{body:BODY_NAMES,hand:HAND_NAMES}:{joints:Object.keys(engine.bones)},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:human?{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}}:{joints:'retain valid occluded joints',projectionValidity:'explicit valid boolean; no human hand filtering'},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},lineart:{style:'white surface with black silhouette and occlusion contours',lineWidth:doc.camera?.lineArt?.lineWidth??1.25,constructionGuides:false},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:appearance?.name??rig.name,appearance:appearance?{...appearance,source:customAppearance?'local user '+(appearance.format??'glb').toUpperCase():'bundled',embeddedInProject:false}:null,modelLicense:customAppearance?'Local source asset':rig.license,...(rig.attribution?{rigAttribution:rig.attribution,...(!customAppearance?{modelAttribution:rig.attribution}:{})}:{})},null,2));
+    zip.file('manifest.json',JSON.stringify({application:'MomoPoseForge',applicationVersion:'0.7.0',exportVersion:3,projectVersion:1,sceneVersion:scene?1:undefined,actors,sceneProps:{count:doc.props?.length??0,visible:doc.props?.filter(p=>p.visible).length??0,renderedIn:['surface','lineart','depth','normal','mask'],skeleton:'active rig only'},referenceImage:{rendered:false,embeddedInProject:!!doc.referenceImage&&options.project},rig:doc.rig,rigVersion:rig.version,width:w,height:h,channels:{surface:options.surface,lineart:!!options.lineart,guides,skeleton:options.skeleton,keypoints:options.keypoints,depth:options.depth,normal:options.normal},coordinates:{world:'right-handed, Y up, +Z initial forward, metres',image:'top-left origin, +X right, +Y down, pixels'},keypointFormat:human?'OpenPose COCO18 + 2 x HAND21':'momo-skeleton v1',pointOrder:human?{body:BODY_NAMES,hand:HAND_NAMES}:{joints:Object.keys(engine.bones)},keypointConfidence:'synthetic validity, not detection confidence',occlusionPolicy:human?{body:'retain valid occluded joints',hands:options.hideOccludedHands?'zero out-of-frame or surface-occluded joints':'retain valid occluded joints',missing:'[0,0,0]',handToleranceMetres:{wrist:handTolerance(0),fingerBase:handTolerance(1),finger:handTolerance(2)}}:{joints:'retain valid occluded joints',projectionValidity:'explicit valid boolean; no human hand filtering'},depth:{quantity:'camera axial depth, metres',range,sharedAcrossViews:true,encoding:'gray = clamp((far - depth) / (far - near), 0, 1), 8-bit',near:'white',far:'black',background:'black; use mask.png to distinguish background',colorSpace:'linear data, no tone mapping or sRGB transfer'},lineart:{style:'white surface with black silhouette and occlusion contours',lineWidth:doc.camera?.lineArt?.lineWidth??1.25,constructionGuides:!!doc.camera?.lineArt?.constructionGuides,guideLayer:guides,guideRigs:actors.filter(a=>a.visible&&requireRig(a.rig).drawingGuides).map(a=>a.id)},normal:NORMAL_CONVENTION,mask:{foreground:255,background:0},viewFit:{center:engine.center.toArray(),verticalSpan:engine.span,sharedScale:options.scope==='five',locked:doc.camera?.framing.locked??false},views:manifestViews,model:appearance?.name??rig.name,appearance:appearance?{...appearance,source:customAppearance?'local user '+(appearance.format??'glb').toUpperCase():'bundled',embeddedInProject:false}:null,modelLicense:customAppearance?'Local source asset':rig.license,...(rig.attribution?{rigAttribution:rig.attribution,...(!customAppearance?{modelAttribution:rig.attribution}:{})}:{})},null,2));
     zip.file('README.txt',human?[
       'MomoPoseForge 姿态导出 v3','',
-      'lineart.png 为白模黑线参考图，包含模型轮廓与遮挡线；不含解剖结构辅助线。',
+      'lineart.png 为白模黑线参考图，按工程开关叠加结构辅助线；construction-guides.png 为独立透明结构线层，仅含已适配人体，不含狐狸或道具。',
       '每个视角：mannequin.png 是素体参考；openpose-body-hands.png 是身体 COCO18 + 双手各21点的黑底骨架控制图。',
       'keypoints-openpose.json 使用 OpenPose 1.3 字段，像素坐标 x,y,c；每手从手腕开始，依次为拇指、食指、中指、无名指、小指，每指4点。',
       'c=1 是程序生成的有效点，不是 AI 检测置信度。出画面点为0；手部按所选遮挡设置过滤，判断容差见 manifest.json。未输出面部点集。',
@@ -149,7 +154,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       'MomoPoseForge 通用骨架导出',`骨架：${rig.name} / ${rig.id} v${rig.version}`,
       'skeleton.png 和 joints.json 是此骨架的连接图与投影关节数据，不是人体 OpenPose。',
       'skeleton-world.json 使用米制三维坐标，含关节名和父骨骼名；manifest.json 记录各相机矩阵。',
-      'lineart.png 为白模黑线参考图，包含模型轮廓与遮挡线；不含解剖结构辅助线。',
+      'lineart.png 为白模黑线参考图，按工程开关叠加结构辅助线；construction-guides.png 为独立透明结构线层，仅含已适配人体，不含狐狸或道具。',
       'mannequin.png 为素体图；depth.png 为近白远黑线性深度；normal.png 为相机空间表面法线；mask.png 白色为前景。',
       '参考图不进入渲染；工程内可内嵌参考图。project.pose.json 可重新打开编辑。',
     ].join('\n'));

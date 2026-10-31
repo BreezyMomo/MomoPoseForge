@@ -4,6 +4,7 @@ import type {RigDefinition} from './rigs';
 import type {PoseDocument} from './types';
 import {constrainFk} from './fkControls';
 import {LOCAL_AXES,solveConstrainedIK,type SolverJoint} from './fullBodyIK';
+import {bendFrame,swivelChain} from './bendControls';
 
 export type ArticulatedRig={rig:RigDefinition;bones:Record<string,Bone>;rest:PoseDocument;model:Object3D};
 const world=(state:ArticulatedRig,name:string)=>state.bones[name].getWorldPosition(new Vector3());
@@ -23,7 +24,7 @@ function setEndOrientation(state:ArticulatedRig,end:string,quaternion:Quaternion
 }
 
 /** The chain length, local bind frames and admissible axes all come from the rig. */
-export function solveRigChain(state:ArticulatedRig,end:string,target:Vector3,orientation?:Quaternion){
+export function solveRigChain(state:ArticulatedRig,end:string,target:Vector3,orientation?:Quaternion,pole?:Vector3){
   const chain=state.rig.chains[end];if(!chain||chain.length<3||chain.at(-1)!==end)throw new Error('IK 链定义无效');
   const endOrientation=orientation??state.bones[end].getWorldQuaternion(new Quaternion());
   const joints:SolverJoint[]=chain.slice(0,-1).map(name=>{
@@ -44,12 +45,17 @@ export function solveRigChain(state:ArticulatedRig,end:string,target:Vector3,ori
       const angle=MathUtils.radToDeg(twistAngle(rest.clone().invert().multiply(lower.quaternion),axis));
       const origin=world(state,chain[0]),middle=world(state,chain[1]),tip=world(state,end),a=origin.distanceTo(middle),b=middle.distanceTo(tip),d=origin.distanceTo(target);
       const bend=Math.acos(MathUtils.clamp((d*d-a*a-b*b)/(2*a*b),-1,1));
-      if(angle-hinge.min<2&&bend>MathUtils.degToRad(3)){
-        lower.quaternion.copy(rest.multiply(new Quaternion().setFromAxisAngle(axis,MathUtils.degToRad(MathUtils.clamp(hinge.min+MathUtils.radToDeg(bend),hinge.min,hinge.max)))));lower.updateWorldMatrix(false,true);
+      const straight=hinge.straight??hinge.min;
+      if(Math.abs(angle-straight)<2&&bend>MathUtils.degToRad(3)){
+        lower.quaternion.copy(rest.multiply(new Quaternion().setFromAxisAngle(axis,MathUtils.degToRad(MathUtils.clamp(straight+MathUtils.radToDeg(bend),hinge.min,hinge.max)))));lower.updateWorldMatrix(false,true);
       }
     }
   }
   const result=solveConstrainedIK(state.bones,joints,[{name:end,target,weight:1}],name=>projectRigJoint(state,name),48);
+  if(pole&&state.rig.bendControls?.[end]){
+    const frame=bendFrame(state.bones,chain,pole.clone().sub(world(state,chain[0])));
+    if(frame)swivelChain(state.bones,chain,frame.axis,-frame.angle);
+  }
   setEndOrientation(state,end,endOrientation);
   return {...result,error:world(state,end).distanceTo(target),position:world(state,end)};
 }

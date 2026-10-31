@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 
 export type DepthRange={near:number;far:number};
-export type RenderKind='surface'|'lineart'|'skeleton'|'body-skeleton'|'depth'|'normal'|'mask';
+export type RenderKind='surface'|'lineart'|'guides'|'skeleton'|'body-skeleton'|'depth'|'normal'|'mask';
 export type DataKind='depth'|'normal'|'mask'|'visibility';
+/** Transparent guide meshes blend into a zero-alpha target as premultiplied
+ * colors. Canvas ImageData / PNG need straight RGB to avoid dark fringes. */
+export function straightAlpha(pixels:Uint8Array){for(let i=0;i<pixels.length;i+=4){const alpha=pixels[i+3];for(let c=0;c<3;c++)pixels[i+c]=alpha?Math.min(255,Math.round(pixels[i+c]*255/alpha)):0;}return pixels;}
 export const NORMAL_CONVENTION={space:'camera',cameraAxes:{x:'right',y:'up',z:'towards viewer'},encoding:'RGB = 0.5 * (-Nx, Ny, Nz) + 0.5',protocol:'ControlNet 1.1 Normal / ScanNet visualization',colorSpace:'linear data, no tone mapping or sRGB transfer',background:[0,0,0]};
 export function depthRangeFor(box:THREE.Box3,cameras:THREE.Camera[]):DepthRange{
   let near=Infinity,far=-Infinity;

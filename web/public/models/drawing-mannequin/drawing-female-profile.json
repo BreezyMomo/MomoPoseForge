@@ -1,0 +1,604 @@
+{
+  "id": "momo-drawing-female-v1",
+  "name": "绘画女素体",
+  "version": 1,
+  "rigVersion": 1,
+  "rigCalibrationVersion": 2,
+  "height": 1.775,
+  "units": "metres",
+  "forward": "+Z",
+  "up": "+Y",
+  "restRotation": "identity",
+  "handCurlNormalSign": -1,
+  "license": "Original MomoPoseForge procedural geometry",
+  "bones": {
+    "Hips": {
+      "parent": null,
+      "position": [
+        0,
+        0.99,
+        0
+      ]
+    },
+    "Spine": {
+      "parent": "Hips",
+      "position": [
+        0,
+        1.085,
+        0
+      ]
+    },
+    "Spine1": {
+      "parent": "Spine",
+      "position": [
+        0,
+        1.18,
+        0
+      ]
+    },
+    "Chest": {
+      "parent": "Spine1",
+      "position": [
+        0,
+        1.28,
+        0
+      ]
+    },
+    "UpperChest": {
+      "parent": "Chest",
+      "position": [
+        0,
+        1.39,
+        0
+      ]
+    },
+    "Neck": {
+      "parent": "UpperChest",
+      "position": [
+        0,
+        1.48,
+        0
+      ]
+    },
+    "Head": {
+      "parent": "Neck",
+      "position": [
+        0,
+        1.56,
+        0
+      ]
+    },
+    "HeadTop_End": {
+      "parent": "Head",
+      "position": [
+        0,
+        1.775,
+        0
+      ]
+    },
+    "LeftShoulder": {
+      "parent": "UpperChest",
+      "position": [
+        0.065,
+        1.4,
+        0
+      ]
+    },
+    "LeftArm": {
+      "parent": "LeftShoulder",
+      "position": [
+        0.18,
+        1.4,
+        0
+      ]
+    },
+    "LeftForeArm": {
+      "parent": "LeftArm",
+      "position": [
+        0.46,
+        1.4,
+        -0.005
+      ]
+    },
+    "LeftHand": {
+      "parent": "LeftForeArm",
+      "position": [
+        0.72,
+        1.4,
+        0
+      ]
+    },
+    "LeftUpLeg": {
+      "parent": "Hips",
+      "position": [
+        0.105,
+        0.945,
+        0
+      ]
+    },
+    "LeftLeg": {
+      "parent": "LeftUpLeg",
+      "position": [
+        0.105,
+        0.53,
+        0.015
+      ]
+    },
+    "LeftFoot": {
+      "parent": "LeftLeg",
+      "position": [
+        0.105,
+        0.105,
+        -0.015
+      ]
+    },
+    "LeftToeBase": {
+      "parent": "LeftFoot",
+      "position": [
+        0.105,
+        0.033,
+        0.13
+      ]
+    },
+    "LeftToe_End": {
+      "parent": "LeftToeBase",
+      "position": [
+        0.105,
+        0.025,
+        0.22
+      ]
+    },
+    "LeftIndex1": {
+      "parent": "LeftHand",
+      "position": [
+        0.785,
+        1.4,
+        0.036
+      ]
+    },
+    "LeftIndex2": {
+      "parent": "LeftIndex1",
+      "position": [
+        0.8160000000000001,
+        1.4,
+        0.036
+      ]
+    },
+    "LeftIndex3": {
+      "parent": "LeftIndex2",
+      "position": [
+        0.8400000000000001,
+        1.4,
+        0.036
+      ]
+    },
+    "LeftIndex4": {
+      "parent": "LeftIndex3",
+      "position": [
+        0.8580000000000001,
+        1.4,
+        0.036
+      ]
+    },
+    "LeftMiddle1": {
+      "parent": "LeftHand",
+      "position": [
+        0.79,
+        1.4,
+        0.01
+      ]
+    },
+    "LeftMiddle2": {
+      "parent": "LeftMiddle1",
+      "position": [
+        0.8260000000000001,
+        1.4,
+        0.01
+      ]
+    },
+    "LeftMiddle3": {
+      "parent": "LeftMiddle2",
+      "position": [
+        0.8530000000000001,
+        1.4,
+        0.01
+      ]
+    },
+    "LeftMiddle4": {
+      "parent": "LeftMiddle3",
+      "position": [
+        0.8730000000000001,
+        1.4,
+        0.01
+      ]
+    },
+    "LeftRing1": {
+      "parent": "LeftHand",
+      "position": [
+        0.785,
+        1.4,
+        -0.018
+      ]
+    },
+    "LeftRing2": {
+      "parent": "LeftRing1",
+      "position": [
+        0.8180000000000001,
+        1.4,
+        -0.018
+      ]
+    },
+    "LeftRing3": {
+      "parent": "LeftRing2",
+      "position": [
+        0.8430000000000001,
+        1.4,
+        -0.018
+      ]
+    },
+    "LeftRing4": {
+      "parent": "LeftRing3",
+      "position": [
+        0.8620000000000001,
+        1.4,
+        -0.018
+      ]
+    },
+    "LeftLittle1": {
+      "parent": "LeftHand",
+      "position": [
+        0.774,
+        1.4,
+        -0.043
+      ]
+    },
+    "LeftLittle2": {
+      "parent": "LeftLittle1",
+      "position": [
+        0.799,
+        1.4,
+        -0.043
+      ]
+    },
+    "LeftLittle3": {
+      "parent": "LeftLittle2",
+      "position": [
+        0.8190000000000001,
+        1.4,
+        -0.043
+      ]
+    },
+    "LeftLittle4": {
+      "parent": "LeftLittle3",
+      "position": [
+        0.8350000000000001,
+        1.4,
+        -0.043
+      ]
+    },
+    "LeftThumb1": {
+      "parent": "LeftHand",
+      "position": [
+        0.738,
+        1.388,
+        0.047
+      ]
+    },
+    "LeftThumb2": {
+      "parent": "LeftThumb1",
+      "position": [
+        0.764,
+        1.388,
+        0.062
+      ]
+    },
+    "LeftThumb3": {
+      "parent": "LeftThumb2",
+      "position": [
+        0.79,
+        1.388,
+        0.077
+      ]
+    },
+    "LeftThumb4": {
+      "parent": "LeftThumb3",
+      "position": [
+        0.816,
+        1.388,
+        0.092
+      ]
+    },
+    "RightShoulder": {
+      "parent": "UpperChest",
+      "position": [
+        -0.065,
+        1.4,
+        0
+      ]
+    },
+    "RightArm": {
+      "parent": "RightShoulder",
+      "position": [
+        -0.18,
+        1.4,
+        0
+      ]
+    },
+    "RightForeArm": {
+      "parent": "RightArm",
+      "position": [
+        -0.46,
+        1.4,
+        -0.005
+      ]
+    },
+    "RightHand": {
+      "parent": "RightForeArm",
+      "position": [
+        -0.72,
+        1.4,
+        0
+      ]
+    },
+    "RightUpLeg": {
+      "parent": "Hips",
+      "position": [
+        -0.105,
+        0.945,
+        0
+      ]
+    },
+    "RightLeg": {
+      "parent": "RightUpLeg",
+      "position": [
+        -0.105,
+        0.53,
+        0.015
+      ]
+    },
+    "RightFoot": {
+      "parent": "RightLeg",
+      "position": [
+        -0.105,
+        0.105,
+        -0.015
+      ]
+    },
+    "RightToeBase": {
+      "parent": "RightFoot",
+      "position": [
+        -0.105,
+        0.033,
+        0.13
+      ]
+    },
+    "RightToe_End": {
+      "parent": "RightToeBase",
+      "position": [
+        -0.105,
+        0.025,
+        0.22
+      ]
+    },
+    "RightIndex1": {
+      "parent": "RightHand",
+      "position": [
+        -0.785,
+        1.4,
+        0.036
+      ]
+    },
+    "RightIndex2": {
+      "parent": "RightIndex1",
+      "position": [
+        -0.8160000000000001,
+        1.4,
+        0.036
+      ]
+    },
+    "RightIndex3": {
+      "parent": "RightIndex2",
+      "position": [
+        -0.8400000000000001,
+        1.4,
+        0.036
+      ]
+    },
+    "RightIndex4": {
+      "parent": "RightIndex3",
+      "position": [
+        -0.8580000000000001,
+        1.4,
+        0.036
+      ]
+    },
+    "RightMiddle1": {
+      "parent": "RightHand",
+      "position": [
+        -0.79,
+        1.4,
+        0.01
+      ]
+    },
+    "RightMiddle2": {
+      "parent": "RightMiddle1",
+      "position": [
+        -0.8260000000000001,
+        1.4,
+        0.01
+      ]
+    },
+    "RightMiddle3": {
+      "parent": "RightMiddle2",
+      "position": [
+        -0.8530000000000001,
+        1.4,
+        0.01
+      ]
+    },
+    "RightMiddle4": {
+      "parent": "RightMiddle3",
+      "position": [
+        -0.8730000000000001,
+        1.4,
+        0.01
+      ]
+    },
+    "RightRing1": {
+      "parent": "RightHand",
+      "position": [
+        -0.785,
+        1.4,
+        -0.018
+      ]
+    },
+    "RightRing2": {
+      "parent": "RightRing1",
+      "position": [
+        -0.8180000000000001,
+        1.4,
+        -0.018
+      ]
+    },
+    "RightRing3": {
+      "parent": "RightRing2",
+      "position": [
+        -0.8430000000000001,
+        1.4,
+        -0.018
+      ]
+    },
+    "RightRing4": {
+      "parent": "RightRing3",
+      "position": [
+        -0.8620000000000001,
+        1.4,
+        -0.018
+      ]
+    },
+    "RightLittle1": {
+      "parent": "RightHand",
+      "position": [
+        -0.774,
+        1.4,
+        -0.043
+      ]
+    },
+    "RightLittle2": {
+      "parent": "RightLittle1",
+      "position": [
+        -0.799,
+        1.4,
+        -0.043
+      ]
+    },
+    "RightLittle3": {
+      "parent": "RightLittle2",
+      "position": [
+        -0.8190000000000001,
+        1.4,
+        -0.043
+      ]
+    },
+    "RightLittle4": {
+      "parent": "RightLittle3",
+      "position": [
+        -0.8350000000000001,
+        1.4,
+        -0.043
+      ]
+    },
+    "RightThumb1": {
+      "parent": "RightHand",
+      "position": [
+        -0.738,
+        1.388,
+        0.047
+      ]
+    },
+    "RightThumb2": {
+      "parent": "RightThumb1",
+      "position": [
+        -0.764,
+        1.388,
+        0.062
+      ]
+    },
+    "RightThumb3": {
+      "parent": "RightThumb2",
+      "position": [
+        -0.79,
+        1.388,
+        0.077
+      ]
+    },
+    "RightThumb4": {
+      "parent": "RightThumb3",
+      "position": [
+        -0.816,
+        1.388,
+        0.092
+      ]
+    }
+  },
+  "hingeAxes": {
+    "LeftForeArm": [
+      0,
+      -1,
+      0
+    ],
+    "RightForeArm": [
+      0,
+      1,
+      0
+    ],
+    "LeftLeg": [
+      1,
+      0,
+      0
+    ],
+    "RightLeg": [
+      1,
+      0,
+      0
+    ]
+  },
+  "headAnchors": {
+    "nose": [
+      0,
+      0.095,
+      0.094
+    ],
+    "leftEye": [
+      0.03,
+      0.125,
+      0.08
+    ],
+    "rightEye": [
+      -0.03,
+      0.125,
+      0.08
+    ],
+    "leftEar": [
+      0.09,
+      0.095,
+      0
+    ],
+    "rightEar": [
+      -0.09,
+      0.095,
+      0
+    ]
+  },
+  "mesh": {
+    "vertices": 45466,
+    "triangles": 84714,
+    "bones": 66,
+    "meshes": 9
+  },
+  "source": {
+    "generator": "tools/build-drawing-mannequin.mjs + tools/refine-drawing-mannequin.py",
+    "geometry": "Self-authored lofts refined by Blender voxel union, smoothing and topology reduction; no third-party character mesh or reference image data embedded",
+    "notes": "Single closed spine-weighted shoulder/neck/torso/pelvis surface, faceless oval head, joint-centered mechanical balls. Not cloth, muscle or soft-body simulation."
+  }
+}

@@ -1,8 +1,12 @@
 import {describe,it,expect,vi} from 'vitest';
 import {ACESFilmicToneMapping,Color,MeshBasicMaterial,NoToneMapping,PerspectiveCamera,Scene,WebGLRenderTarget,type WebGLRenderer} from 'three';
 import {LineArtRenderer} from './LineArtRenderer';
+import {straightAlpha} from './renderPasses';
 
 describe('线稿渲染隔离',()=>{
+  it('透明结构线使用直通颜色，抗锯齿边缘合成后仍是相同线色且零透明无残留',()=>{
+    const pixels=new Uint8Array([32,32,32,128,64,64,64,255,255,255,255,0]);expect([...straightAlpha(pixels)]).toEqual([64,64,64,128,64,64,64,255,0,0,0,0]);
+  });
   for(const fail of [false,true])it(`绘制${fail?'失败':'成功'}后恢复相机之外的全部渲染状态`,()=>{
     const pass=new LineArtRenderer(),scene=new Scene(),background=new Color('#123456'),override=new MeshBasicMaterial(),target=new WebGLRenderTarget(8,8),previous=new WebGLRenderTarget(4,4),color=new Color('#abcdef');scene.background=background;scene.overrideMaterial=override;
     const state={target:previous,color:color.clone(),alpha:.35};

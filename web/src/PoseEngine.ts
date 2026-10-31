@@ -5,13 +5,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { solveTwoBone, solveLimbRotations, projectPoint } from './math';
-import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, FINGER_PART_NAMES, DIGITS, type Digit, type Side, type HandValues, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
+import { DEFAULT_VIEWS, END_EFFECTORS, PART_NAMES, DIGITS, type Digit, type Side, type HandValues, type Effector, type EngineInfo, type PoseDocument, type Preset, type Vec3, type ViewSlot } from './types';
 import {XBOT_RIG,requireRig,type RigDefinition} from './rigs';
 import {parseDocument} from './files';
 import {actorPose,poseWithScene,readSceneDocument,relocatePose,MAX_ACTORS,type SceneActor,type SceneDocument,type ActorSummary} from './sceneDocument';
 import {buildProceduralRig,disposeObject,ensureRigNormals,visibleSurfaceBounds} from './rigGeometry';
 import {fkAngles,fkRotation,constrainFk} from './fkControls';
 import {solveRigChain,solveRigContacts,type ArticulatedRig} from './articulatedIK';
+import {migrateCalibration} from './rigCalibration';
 import {JOINT_LIMITS,constrainJointRotation,decomposeJointRotation,solveSpineTarget} from './poseControls';
 import {FlyCameraControls,perspectiveForNavigation,cloneExportCamera} from './FlyCameraControls';
 import {emptyHandValues,fingerPart,fingerAxes,fingerAngles,fingerRotation,forearmAngles,forearmRotation,twistAngle} from './articulation';
@@ -19,10 +20,14 @@ import {LIMB_LIMITS,constrainLimb,limbAxes} from './limbLimits';
 import {LOCAL_AXES,solveConstrainedIK,captureJoints,restoreJoints,interpolateJoints,goalError,type PositionGoal,type SolverJoint} from './fullBodyIK';
 import {COCO_LINKS,COCO_COLORS,HAND_LINKS,handBones,projectPose,paintSkeleton,worldSkeleton,depthVisibility,type OpenPoseFrame} from './poseOutput';
 import {LineArtRenderer} from './LineArtRenderer';
-import {depthRangeFor,dataMaterial,type DepthRange,type RenderKind,type DataKind} from './renderPasses';
+import {ConstructionGuides} from './ConstructionGuides';
+import {depthRangeFor,dataMaterial,straightAlpha,type DepthRange,type RenderKind,type DataKind} from './renderPasses';
 import {defaultCameraSettings,captureCamera,restoreCamera,validOutputSize,type CameraSettings} from './cameraState';
 import {validateReferenceImage,referenceWithSettings,type ReferenceImage,type ReferenceSettings} from './referenceImage';
-import {HAND_GESTURES,validHandValues,normalizedHandValues,writeHandValues,handShapeValid} from './handGestures';
+import {HAND_GESTURES,validHandValues,normalizedHandValues,handShapeValid} from './handGestures';
+import {handBone,fingerBone,rigFinger,rigFingerFrame,writeRigHand,requiredHandBones} from './handRig';
+import {bendFrame,swivelChain} from './bendControls';
+import {applyFigurePreset} from './figurePresets';
 import {defaultSymmetry,symmetricLimb,limbParts,mirroredRotation,type SymmetryGroup} from './symmetry';
 import {MotionPreview} from './motionPreview';
 import {buildAppearance,validAppearance,type AppearanceRef} from './characterAppearance';
@@ -81,6 +86,7 @@ export class PoseEngine {
   mode: 'translate' | 'rotate' = 'translate';
   display: 'surface' | 'skeleton' | 'lineart' = 'surface';
   private lineArt?:LineArtRenderer;
+  private construction?:ConstructionGuides;
   view = 'free';
   warning = '';
   ready = false;
@@ -274,7 +280,7 @@ export class PoseEngine {
         this.vertexCount += obj.geometry.attributes.position.count;
       }
     });
-    const required=[this.activeRig.root,...this.activeRig.editableJoints,...Object.values(this.activeRig.chains).flat(),...(this.activeRig.capabilities.hands?[...handBones('Left'),...handBones('Right')]:[])];
+    const required=[this.activeRig.root,...this.activeRig.editableJoints,...Object.values(this.activeRig.chains).flat(),...(this.activeRig.capabilities.hands?(this.activeRig.handSkeleton?requiredHandBones(this.activeRig):[...handBones('Left'),...handBones('Right')]):[])];
     for (const name of required) if (!this.bones[name]) throw new Error(`模型缺少骨骼 ${name}`);
     for(const[end,chain]of Object.entries(this.activeRig.chains))if(chain.length<3||chain.at(-1)!==end)throw new Error(`IK 链定义无效：${end}`);
     this.model.updateMatrixWorld(true);
@@ -287,7 +293,7 @@ export class PoseEngine {
     this.originalMeshes=[];this.model.traverse(o=>{if(o instanceof THREE.Mesh)this.originalMeshes.push(o);});
     for (const name of this.activeRig.editableJoints) {
       if(!this.bones[name])continue;
-      const radius=this.activeRig.capabilities.hands&&fingerPart(name) ? .0065 : this.effectors.includes(name) ? .022 : .016;
+      const radius=rigFinger(this.activeRig,name) ? .0065 : this.effectors.includes(name) ? .022 : .016;
       const handle = new THREE.Mesh(new THREE.SphereGeometry(radius,12,8), new THREE.MeshBasicMaterial({ color:'#b1b6b6', depthTest:false, transparent:true, opacity:.9 }));
       handle.userData.part = name; handle.renderOrder = 100; this.helpers.add(handle); this.handles.push(handle);
     }
@@ -328,7 +334,7 @@ export class PoseEngine {
     if(state)Object.assign(controller,state);return controller;
   }
   async loadActorRuntime(rig:RigDefinition){const controller=this.controller(undefined,rig);try{await controller.load(true);await controller.restoreMotionLibrary().catch(()=>0);return controller.captureActorRuntime();}catch(e){this.disposeActorRuntime(controller.captureActorRuntime());throw e;}}
-  private disposeActorRuntime(state:ActorRuntime){state.motion?.dispose();for(const group of [state.model,state.helpers,state.boneDisplay]){group.removeFromParent();disposeObject(group);}}
+  private disposeActorRuntime(state:ActorRuntime){this.construction?.forget(state.model);state.motion?.dispose();for(const group of [state.model,state.helpers,state.boneDisplay]){group.removeFromParent();disposeObject(group);}}
   private refreshActors(rebuildSkeleton=false){
     if(!this.actors)return;this.stashActor();
     for(const slot of this.actors.values()){
@@ -438,7 +444,7 @@ export class PoseEngine {
   }
 
   solve(end: string, target: THREE.Vector3, pole?: THREE.Vector3, preserveEndOrientation=true) {
-    if(this.activeRig.ik){const result=solveRigChain(this.articulatedState(),end,target);if(result.error>.003)this.warning=(this.activeRig.jointControls?.find(j=>j.name===end)?.label??'末端')+'目标已到关节可达范围，剩余 '+(result.error*100).toFixed(1)+' 厘米';return {...result,end:result.position};}
+    if(this.activeRig.ik){const hint=pole??(this.poles[end]?new V().fromArray(this.poles[end]):undefined),result=solveRigChain(this.articulatedState(),end,target,undefined,hint);if(result.error>.003)this.warning=(this.activeRig.jointControls?.find(j=>j.name===end)?.label??'末端')+'目标已到关节可达范围，剩余 '+(result.error*100).toFixed(1)+' 厘米';return {...result,end:result.position};}
     const chain = CHAINS[end]; if (!chain) return;
     const [a,b,c] = chain;
     const start = this.world(a), mid = this.world(b), last = this.world(c),endOrientation=this.bones[c].getWorldQuaternion(new Q());
@@ -695,7 +701,7 @@ export class PoseEngine {
       if(this.dragBefore)this.restorePose(this.dragBefore);
       const bone=this.bones[this.selected];if(!bone)return false;
       const baseline=this.snapshot();this.warning='';
-      if(this.mode==='rotate'){this.setWorldQuaternion(bone,this.gizmo.quaternion);this.limitJoint(this.selected);}
+      if(this.mode==='rotate'){this.setWorldQuaternion(bone,this.gizmo.quaternion);this.limitJoint(this.selected);this.markCustomHand(this.selected);}
       else if(this.activeRig.ik&&this.activeRig.chains[this.selected])this.solve(this.selected,this.gizmo.position.clone());
       else if(this.selected===this.activeRig.root){bone.position.copy(bone.parent!.worldToLocal(this.gizmo.position.clone()));bone.updateWorldMatrix(false,true);}
       else return false;
@@ -761,7 +767,7 @@ export class PoseEngine {
     if(this.motion?.active)return;
     if(!this.bones[name])return;
     this.selected=name;this.warning='';
-    const digit=this.activeRig.capabilities.hands?fingerPart(name):null;if(digit)this.handDetail=digit[1] as Side;else if(this.handDetail){this.handDetail=null;if(this.ready)this.focus();}
+    const digit=rigFinger(this.activeRig,name);if(digit)this.handDetail=digit.side;else if(this.handDetail){this.handDetail=null;if(this.ready)this.focus();}
     this.setMode(this.translationControl(name)?'translate':'rotate');
     this.syncGizmo(); this.update(false);
   }
@@ -779,10 +785,32 @@ export class PoseEngine {
     this.suppress=false;
   }
   setMore(value:boolean){this.moreControls=value;this.update(false);}
-  setHandDetail(side:Side|null){if(!this.activeRig.capabilities.hands)return;const previous=this.handDetail;this.handDetail=side;if(side)this.select(`${side}Index1`);else if(fingerPart(this.selected)&&previous)this.select(`${previous}Hand`);this.update(false);}
+  bendDirection(end:string){
+    const reference=this.activeRig.bendControls?.[end],chain=this.activeRig.chains[end];
+    if(!reference||!chain)return null;
+    return bendFrame(this.bones,chain,new V().fromArray(reference).applyQuaternion(this.model.getWorldQuaternion(new Q())));
+  }
+  setBendDirection(end:string,degrees:number,commit=true){
+    if(!this.actorEditable||this.interactionBlocked||this.motion?.active||!Number.isFinite(degrees))return false;
+    const pair=this.activeSymmetry(end),requests=[{end,degrees},...(pair?[{end:end.replace(pair.side,pair.other),degrees:-degrees}]:[])];
+    if(requests.some(r=>!this.bendDirection(r.end)))return false;
+    const before=this.snapshot();this.warning='';
+    for(const request of requests){
+      const frame=this.bendDirection(request.end)!,chain=this.activeRig.chains[request.end],orientation=this.bones[request.end].getWorldQuaternion(new Q());
+      swivelChain(this.bones,chain,frame.axis,THREE.MathUtils.degToRad(THREE.MathUtils.clamp(request.degrees,-180,180))-frame.angle);this.limitJoint(chain[0]);
+      // A constrained shoulder/hip may reject a swivel. Never trade endpoint
+      // drift for the requested direction, including the symmetric counterpart.
+      if(this.world(request.end).distanceTo(frame.c)>.0005||this.bones[request.end].getWorldQuaternion(new Q()).angleTo(orientation)>.001){this.restorePose(before);this.warning='已到肘膝朝向可调范围，手脚位置保持不变';this.update(false);this.syncGizmo();return false;}
+      const next=this.bendDirection(request.end)!;this.poles[request.end]=asVec(next.b.clone().addScaledVector(next.radial,.5));
+    }
+    this.syncTargets();this.update(false);this.syncGizmo();if(commit)this.commit();return true;
+  }
+  fingerName(side:Side,digit:Digit,joint:number){return fingerBone(this.activeRig,side,digit,joint);}
+  get handNormalSign(){return this.profile.handCurlNormalSign??-1;}
+  setHandDetail(side:Side|null){if(!this.activeRig.capabilities.hands)return;const previous=this.handDetail;this.handDetail=side;if(side)this.select(this.fingerName(side,'Index',1));else if(rigFinger(this.activeRig,this.selected)&&previous)this.select(handBone(this.activeRig,previous));this.update(false);}
   focusHand(side:Side){
-    if(!this.activeRig.capabilities.hands||!this.bones[`${side}Hand`]||this.cameraState?.locked)return;
-    this.fly?.stop();const center=this.world(`${side}Hand`);for(const digit of DIGITS)center.add(this.world(`${side}${digit}2`));center.divideScalar(6);
+    if(!this.activeRig.capabilities.hands||!this.bones[handBone(this.activeRig,side)]||this.cameraState?.locked)return;
+    this.fly?.stop();const center=this.world(handBone(this.activeRig,side));for(const digit of DIGITS)center.add(this.world(this.fingerName(side,digit,2)));center.divideScalar(6);
     const direction=this.camera.position.clone().sub(this.orbit.target).normalize();this.view='free';
     this.camera=new THREE.PerspectiveCamera(this.cameraState.fov,this.host.clientWidth/Math.max(1,this.host.clientHeight),.01,100);
     this.camera.position.copy(center).addScaledVector(direction,.52);this.camera.lookAt(center);this.orbit.object=this.camera;this.orbit.target.copy(center);this.transform.camera=this.camera;this.orbit.update();this.commitCamera();
@@ -820,7 +848,7 @@ export class PoseEngine {
     if(!this.humanoid){
       const baseline=this.snapshot();
       const bone=this.bones[this.selected],rest=this.restRotation(),angles=fkAngles(bone.quaternion,rest,this.rigJoint());angles[axis]=THREE.MathUtils.clamp(value,-180,180);
-      bone.quaternion.copy(fkRotation(angles,rest,this.rigJoint()));this.limitJoint(this.selected);this.keepArticulatedPins(baseline);this.syncTargets();this.update(false);this.syncGizmo();this.commit();return;
+      bone.quaternion.copy(fkRotation(angles,rest,this.rigJoint()));this.limitJoint(this.selected);this.markCustomHand(this.selected);this.keepArticulatedPins(baseline);this.syncTargets();this.update(false);this.syncGizmo();this.commit();return;
     }
     const paired=this.pairedEdit(this.selected,()=>{const bone=this.bones[this.selected],e=new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'),a=[e.x,e.y,e.z];a[axis]=THREE.MathUtils.degToRad(THREE.MathUtils.clamp(value,-180,180));bone.quaternion.setFromEuler(new THREE.Euler(a[0],a[1],a[2],'XYZ'));this.limitJoint(this.selected);});
     if(paired!==null){if(paired){this.syncGizmo();this.commit();}return;}
@@ -833,17 +861,18 @@ export class PoseEngine {
   }
   private applyHandShape(side:'Left'|'Right',shape:string){
     const gesture=HAND_GESTURES.find(g=>g.name===shape);if(!gesture)return;
-    this.hands[side]=shape;writeHandValues(this.bones,this.rest.joints,side,gesture.values,this.profile.handCurlNormalSign);
+    this.hands[side]=shape;writeRigHand(this.activeRig,this.model,this.bones,this.rest,side,gesture.values,this.profile.handCurlNormalSign);
   }
-  private markCustomHand(name:string){if(!this.activeRig.capabilities.hands)return;const digit=fingerPart(name);if(digit)this.hands[digit[1] as Side]='自定义';}
+  private markCustomHand(name:string){const digit=rigFinger(this.activeRig,name);if(digit)this.hands[digit.side]='自定义';}
   setFinger(side:Side,digit:Digit,joint:number,value:number,kind:'curl'|'spread',commit=true){
     if(!this.activeRig.capabilities.hands||!this.rest||!Number.isFinite(value)||!DIGITS.includes(digit)||![1,2,3].includes(joint))return;
-    const name=`${side}${digit}${joint}`,bone=this.bones[name],axes=fingerAxes(this.rest.joints,side,digit,joint,this.profile.handCurlNormalSign),angles=fingerAngles(bone.quaternion,axes);
-    bone.quaternion.copy(fingerRotation(digit,joint,kind==='curl'?THREE.MathUtils.degToRad(value):angles.curl,kind==='spread'?THREE.MathUtils.degToRad(value):angles.spread,axes));bone.updateWorldMatrix(false,true);
+    if(!this.actorEditable||this.interactionBlocked||this.motion?.active)return;
+    const name=this.fingerName(side,digit,joint),bone=this.bones[name],axes=rigFingerFrame(this.activeRig,this.model,this.bones,this.rest,side,digit,joint,this.profile.handCurlNormalSign),angles=fingerAngles(axes.rest.clone().invert().multiply(bone.quaternion),axes);
+    bone.quaternion.copy(axes.rest.clone().multiply(fingerRotation(digit,joint,kind==='curl'?THREE.MathUtils.degToRad(value):angles.curl,kind==='spread'?THREE.MathUtils.degToRad(value):angles.spread,axes)));bone.updateWorldMatrix(false,true);
     this.markCustomHand(name);this.update(false);this.syncGizmo();if(commit)this.commit();
   }
   setForearmTwist(side:Side,value:number,commit=true){
-    if(!this.activeRig.capabilities.hands||!this.rest||!Number.isFinite(value))return;
+    if(!this.humanoid||!this.activeRig.capabilities.hands||!this.rest||!Number.isFinite(value))return;
     const paired=this.pairedEdit(`${side}ForeArm`,()=>{const name=`${side}ForeArm`,bone=this.bones[name],axis=this.hingeAxis(name),lower=new V().fromArray(this.rest.joints[`${side}Hand`].position),a=forearmAngles(bone.quaternion,axis,lower);bone.quaternion.copy(forearmRotation(a.bend,THREE.MathUtils.degToRad(value),axis,lower));});
     if(paired!==null){if(paired){this.syncGizmo();if(commit)this.commit();}return;}
     const name=`${side}ForeArm`,bone=this.bones[name],axis=this.hingeAxis(name),lower=new V().fromArray(this.rest.joints[`${side}Hand`].position);
@@ -860,19 +889,20 @@ export class PoseEngine {
   private readHand(side:Side){
     const values=emptyHandValues();if(!this.activeRig.capabilities.hands||!this.rest)return values;
     for(const digit of DIGITS)for(let i=1;i<=3;i++){
-      const angles=fingerAngles(this.bones[`${side}${digit}${i}`].quaternion,fingerAxes(this.rest.joints,side,digit,i,this.profile.handCurlNormalSign));
+      const axes=rigFingerFrame(this.activeRig,this.model,this.bones,this.rest,side,digit,i,this.profile.handCurlNormalSign),angles=fingerAngles(axes.rest.clone().invert().multiply(this.bones[this.fingerName(side,digit,i)].quaternion),axes);
       values[digit].curl[i-1]=THREE.MathUtils.radToDeg(angles.curl);if(i===1)values[digit].spread=THREE.MathUtils.radToDeg(angles.spread);
     }return values;
   }
-  private readForearm(side:Side){if(!this.activeRig.capabilities.hands||!this.rest)return 0;const name=`${side}ForeArm`;return THREE.MathUtils.radToDeg(forearmAngles(this.bones[name].quaternion,this.hingeAxis(name),new V().fromArray(this.rest.joints[`${side}Hand`].position)).twist);}
+  private readForearm(side:Side){if(!this.humanoid||!this.activeRig.capabilities.hands||!this.rest)return 0;const name=`${side}ForeArm`;return THREE.MathUtils.radToDeg(forearmAngles(this.bones[name].quaternion,this.hingeAxis(name),new V().fromArray(this.rest.joints[`${side}Hand`].position)).twist);}
   setHand(side:'Left'|'Right',shape:string){
     const gesture=HAND_GESTURES.find(g=>g.name===shape);if(gesture)this.applyHandGesture(side,gesture.values,gesture.name);
   }
   captureHand(side:Side){const values=this.readHand(side);if(side==='Right')for(const d of DIGITS)values[d].spread*=-1;return normalizedHandValues(values);}
   applyHandGesture(side:Side,values:HandValues,label='自定义'){
     if(!this.activeRig.capabilities.hands)throw new Error('此骨架不支持手势');
+    if(!this.actorEditable||this.interactionBlocked||this.motion?.active)throw new Error('请先显示并解锁角色，结束动画预览');
     if(!this.rest||!validHandValues(values))throw new Error('手势指骨角度无效');
-    writeHandValues(this.bones,this.rest.joints,side,values,this.profile.handCurlNormalSign);this.hands[side]=handShapeValid(label)?label:'自定义';
+    writeRigHand(this.activeRig,this.model,this.bones,this.rest,side,values,this.profile.handCurlNormalSign);this.hands[side]=handShapeValid(label)?label:'自定义';
     this.update(false);this.syncGizmo();this.commit();
   }
   copyHand(source:Side){const target=source==='Left'?'Right':'Left';this.applyHandGesture(target,this.captureHand(source),this.hands[source]);}
@@ -882,7 +912,9 @@ export class PoseEngine {
     if(!this.actorEditable)throw new Error('请先显示并解锁角色');
     if(!this.activeRig.presets.some(p=>p.id===preset.id))throw new Error('此预设不适用于当前骨架');
     if(!this.humanoid){
-      const before=this.snapshot();this.apply({...relocatePose(this.rest,before.root),appearance:before.appearance,name:before.name,selection:before.selection,views:before.views,camera:before.camera,props:before.props,referenceImage:before.referenceImage},true,false,false,false);if(commit)this.commit();return;
+      const before=this.snapshot();this.apply({...relocatePose(this.rest,before.root),appearance:before.appearance,name:before.name,selection:before.selection,views:before.views,camera:before.camera,props:before.props,referenceImage:before.referenceImage},true,false,false,false);
+      if(this.activeRig.figureHeight){this.poles=applyFigurePreset(this.articulatedState(),preset);this.applyHandShape('Left',preset.handShape??'张手');this.applyHandShape('Right',preset.handShape??'张手');this.name=commit?preset.name:before.name;this.syncTargets();this.update(true);this.syncGizmo();}
+      if(commit)this.commit();return;
     }
     // Refuse conflicting contacts before changing anything. Untouched pins stay fixed.
     if(scope!=='all'&&Object.keys(this.pins).some(end=>scope==='lower'||scope==='upper'&&end.endsWith('Hand')))
@@ -1002,6 +1034,7 @@ export class PoseEngine {
   restoreMotionAsset(asset:MotionAsset){this.stashActor();if(!this.actors){this.installImportedMotions(unpackMotionAsset(asset,this.activeRig,this.rest));return;}const prepared=[...this.actors.values()].filter(a=>a.state.rigDefinition.id===asset.rig&&a.state.rigDefinition.version===asset.rigVersion).map(a=>({a,clips:unpackMotionAsset(asset,a.state.rigDefinition,a.state.rest)}));for(const {a,clips}of prepared){a.state.motion??=new MotionPreview(a.state.model,[]);a.state.motion.append(clips);}this.bindActor(this.actors.get(this.activeActorId)!.state);this.onInfo(this.info());}
   setAppearance(ref?:AppearanceRef,commit=true){
     if(ref&&(!validAppearance(ref,this.activeRig)||!this.appearanceGroups?.has(ref.id)))throw new Error('请先载入兼容的角色外观');
+    if(ref?.id!==this.appearance?.id)this.construction?.forget(this.model);
     for(const mesh of this.originalMeshes??[])mesh.visible=!ref;
     for(const[id,group]of this.appearanceGroups??[])group.visible=id===ref?.id;
     this.appearance=ref?{...ref}:undefined;
@@ -1073,7 +1106,7 @@ export class PoseEngine {
   snapshot():PoseDocument{
     const joints:PoseDocument['joints']={};for(const[name,b]of Object.entries(this.bones))joints[name]={position:b.position.toArray(),quaternion:b.quaternion.toArray()};
     const baseline=this.motion?.active?this.motionBefore:undefined;
-    return structuredClone({format:'momo-pose-forge',version:1,rig:this.activeRig.id,rigVersion:this.activeRig.version,...(this.activeRig.ik?{ikVersion:this.activeRig.ik.version}:{}),selection:this.selected,name:baseline?.name??this.name,root:baseline?.root??{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints:baseline?.joints??joints,targets:baseline?.targets??this.targets,poles:baseline?.poles??this.poles,pins:baseline?.pins??this.pins,hands:baseline?.hands??this.hands,views:this.views,ground:this.ground,fullBody:this.fullBody,symmetry:{...(this.symmetry??defaultSymmetry())},...(this.appearance?{appearance:this.appearance}:{}),...(this.camera?{camera:this.getCameraSettings()}: {}),...(this.referenceImage?{referenceImage:this.referenceImage}: {}),...(this.props?.length?{props:this.props}: {})}) as PoseDocument;
+    return structuredClone({format:'momo-pose-forge',version:1,rig:this.activeRig.id,rigVersion:this.activeRig.version,...(this.activeRig.calibration?{rigCalibrationVersion:this.activeRig.calibration.version}:{}),...(this.activeRig.ik?{ikVersion:this.activeRig.ik.version}:{}),selection:this.selected,name:baseline?.name??this.name,root:baseline?.root??{position:this.model.position.toArray(),quaternion:this.model.quaternion.toArray()},joints:baseline?.joints??joints,targets:baseline?.targets??this.targets,poles:baseline?.poles??this.poles,pins:baseline?.pins??this.pins,hands:baseline?.hands??this.hands,views:this.views,ground:this.ground,fullBody:this.fullBody,symmetry:{...(this.symmetry??defaultSymmetry())},...(this.appearance?{appearance:this.appearance}:{}),...(this.camera?{camera:this.getCameraSettings()}: {}),...(this.referenceImage?{referenceImage:this.referenceImage}: {}),...(this.props?.length?{props:this.props}: {})}) as PoseDocument;
   }
   apply(doc:PoseDocument,update=true,restoreView=true,restoreReference=restoreView,restoreSymmetry=restoreView,constrain=true){
     if(doc.rig!==this.activeRig.id||(doc.rigVersion??1)!==this.activeRig.version)throw new Error('工程与当前骨架不兼容');
@@ -1089,7 +1122,10 @@ export class PoseEngine {
     if(constrain&&this.rest)for(const name of this.activeRig.editableJoints)this.limitJoint(name);
     if(doc.selection&&this.bones[doc.selection])this.selected=doc.selection;
     this.targets=structuredClone(doc.targets);this.poles=structuredClone(doc.poles);this.pins=structuredClone(doc.pins);this.hands={...doc.hands};
-    this.model.updateMatrixWorld(true);if(this.activeRig.ik&&doc.ikVersion===undefined)this.syncTargets();this.suppress=false;
+    this.model.updateMatrixWorld(true);const calibrated=this.rest&&migrateCalibration(this.articulatedState(),doc);
+    if(calibrated||this.activeRig.ik&&doc.ikVersion===undefined)this.syncTargets();
+    if(calibrated&&calibrated.positionError>.0001)this.warning=`旧姿势已按新膝轴校准；原脚位超出新骨段可达范围，偏差 ${(calibrated.positionError*1000).toFixed(1)} 毫米，原固定目标保留`;
+    this.suppress=false;
     if(update){this.update(true);this.setMode(this.mode);this.syncGizmo();}
     if(restoreView&&this.camera&&this.orbit){if(doc.camera)this.restoreObservation(doc.camera.active,doc.camera.view);else this.setView('free',false);this.orbit.enabled=this.canNavigateCamera();if(update&&this.ready)this.onInfo(this.info());}
   }
@@ -1104,7 +1140,7 @@ export class PoseEngine {
   /** Helpers are separate scene objects, so restoring bones alone leaves stale hit targets. */
   private syncHandles(){
     if(!this.ready)return;this.model.updateWorldMatrix(true,true);
-    for(const h of this.handles){const name=h.userData.part as string;const point=this.world(name);h.position.copy(h.parent?h.parent.worldToLocal(point):point);h.visible=!this.humanoid?(this.moreControls||name===this.activeRig.root||name===this.selected||this.effectors.includes(name)):(this.handDetail?!!fingerPart(name)&&name.startsWith(this.handDetail):!fingerPart(name)&&(this.moreControls||this.effectors.includes(name)));const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.4:1);}
+    for(const h of this.handles){const name=h.userData.part as string;const point=this.world(name);h.position.copy(h.parent?h.parent.worldToLocal(point):point);const finger=rigFinger(this.activeRig,name);h.visible=this.handDetail?finger?.side===this.handDetail:!finger&&(this.moreControls||name===this.activeRig.root||name===this.selected||this.effectors.includes(name));const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.4:1);}
     if(!this.helpers)return;
     const contacts=this.footContactInfo();
     for(const [end,state] of Object.entries(contacts))for(const point of ['heel','ball'] as const){
@@ -1281,10 +1317,10 @@ export class PoseEngine {
   }
 
   private paintGenericSkeleton(ctx:CanvasRenderingContext2D,data:ReturnType<PoseEngine['genericSkeletonData']>,width:number){const points=new Map(data.joints.map(j=>[j.name,j]));ctx.strokeStyle='#d8bb77';ctx.fillStyle='#d8bb77';ctx.lineWidth=Math.max(2,width/160);for(const j of data.joints){const p=j.parent?points.get(j.parent):undefined;if(p?.valid&&j.valid){ctx.beginPath();ctx.moveTo(...p.image as [number,number]);ctx.lineTo(...j.image as [number,number]);ctx.stroke();}if(j.valid){ctx.beginPath();ctx.arc(...j.image as [number,number],Math.max(3,width/180),0,Math.PI*2);ctx.fill();}}}
-  private renderPixels(camera:THREE.Camera,width:number,height:number,kind:'surface'|'lineart'|DataKind,transparent=false,range:DepthRange={near:.01,far:10}){
+  private renderPixels(camera:THREE.Camera,width:number,height:number,kind:'surface'|'lineart'|'guides'|DataKind,transparent=false,range:DepthRange={near:.01,far:10}){
     this.stashActor();const actorVisibility=[...(this.actors?.values()??[])].flatMap(a=>[a.state.model,a.state.helpers,a.state.boneDisplay].map(object=>({object,visible:object.visible})));
     const prev={background:this.scene.background,override:this.scene.overrideMaterial,model:this.model.visible,helpers:this.helpers.visible,gizmo:this.transform.getHelper().visible,grid:this.grid.visible,ground:this.groundMesh.visible,bones:this.boneDisplay.visible,target:this.renderer.getRenderTarget(),alpha:this.renderer.getClearAlpha(),toneMapping:this.renderer.toneMapping};
-    const data=kind!=='surface'&&kind!=='lineart',material=data?dataMaterial(kind as DataKind,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,range):null;
+    const data=kind!=='surface'&&kind!=='lineart'&&kind!=='guides',material=data?dataMaterial(kind as DataKind,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,range):null;
     const target=new THREE.WebGLRenderTarget(width,height,{samples:data?0:4});target.texture.colorSpace=data?THREE.NoColorSpace:THREE.SRGBColorSpace;
     const debug=this.renderer.debug,previousShaderError=debug?.onShaderError;
     try{
@@ -1292,17 +1328,25 @@ export class PoseEngine {
       this.scene.background=data?new THREE.Color(0):transparent?null:new THREE.Color('#e7e8e5');this.scene.overrideMaterial=material;if(data)this.renderer.toneMapping=THREE.NoToneMapping;
       this.helpers.visible=false;this.transform.getHelper().visible=false;this.grid.visible=false;this.boneDisplay.visible=false;this.model.visible=true;this.groundMesh.visible=false;
       for(const a of this.actors?.values()??[]){a.state.model.visible=a.visible;a.state.helpers.visible=false;a.state.boneDisplay.visible=false;}
-      this.renderer.setClearAlpha(data?1:transparent?0:1);this.renderer.setRenderTarget(target);if(kind==='lineart')this.renderLineArt(camera,target,width,height,transparent);else this.renderer.render(this.scene,camera);
+      this.renderer.setClearAlpha(data?1:transparent?0:1);this.renderer.setRenderTarget(target);if(kind==='lineart'||kind==='guides')this.renderLineArt(camera,target,width,height,transparent,kind==='guides');else this.renderer.render(this.scene,camera);
       const buffer=new Uint8Array(width*height*4);this.renderer.readRenderTargetPixels(target,0,0,width,height,buffer);
+      if(kind==='guides'&&transparent)straightAlpha(buffer);
       return buffer;
     }finally{
       for(const {object,visible}of actorVisibility)object.visible=visible;
       this.scene.background=prev.background;this.scene.overrideMaterial=prev.override;this.model.visible=prev.model;this.helpers.visible=prev.helpers;this.transform.getHelper().visible=prev.gizmo;this.grid.visible=prev.grid;this.groundMesh.visible=prev.ground;this.boneDisplay.visible=prev.bones;this.renderer.setRenderTarget(prev.target);this.renderer.setClearAlpha(prev.alpha);this.renderer.toneMapping=prev.toneMapping;if(debug)debug.onShaderError=previousShaderError;target.dispose();material?.dispose();
     }
   }
-  setLineWidth(width:number){if(!Number.isFinite(width))return;this.cameraState.lineArt={lineWidth:THREE.MathUtils.clamp(width,.5,3)};this.commitCamera();}
-  private renderLineArt(camera:THREE.Camera,target:THREE.WebGLRenderTarget|null,width:number,height:number,transparent=false){
-    this.lineArt??=new LineArtRenderer();this.lineArt.render(this.renderer,this.scene,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,target,width,height,transparent,this.cameraState.lineArt?.lineWidth??1.25);
+  setLineWidth(width:number){if(!Number.isFinite(width))return;this.cameraState.lineArt={...this.cameraState.lineArt,lineWidth:THREE.MathUtils.clamp(width,.5,3)};this.commitCamera();}
+  setConstructionGuides(enabled:boolean){this.cameraState.lineArt={lineWidth:1.25,...this.cameraState.lineArt,constructionGuides:enabled};this.commitCamera();}
+  hasDrawingGuideActors(){return this.actors?[...this.actors.values()].some(a=>a.visible&&a.state.rigDefinition.drawingGuides):!!this.activeRig.drawingGuides;}
+  private renderLineArt(camera:THREE.Camera,target:THREE.WebGLRenderTarget|null,width:number,height:number,transparent=false,guidesOnly=false){
+    const lineWidth=this.cameraState.lineArt?.lineWidth??1.25;
+    this.lineArt??=new LineArtRenderer();this.lineArt.render(this.renderer,this.scene,camera as THREE.PerspectiveCamera|THREE.OrthographicCamera,target,width,height,transparent,lineWidth,guidesOnly);
+    if(guidesOnly||this.cameraState.lineArt?.constructionGuides){
+      this.construction??=new ConstructionGuides();const states=this.actors?[...this.actors.values()].map(a=>({rig:a.state.rigDefinition,model:a.state.model,bones:a.state.bones,rest:a.state.rest})):[this.articulatedState()];
+      this.construction.render(this.renderer,states,camera,target,lineWidth);
+    }
   }
   private renderLineArtViewport(){
     const actors=[...(this.actors?.values()??[])],geometry=actors.length?actors.map(a=>a.state.model):[this.model];
@@ -1319,11 +1363,11 @@ export class PoseEngine {
     }finally{visibility.forEach(v=>v.object.visible=v.visible);this.scene.background=background;this.renderer.autoClear=autoClear;}
   }
   exportCamera(aspect:number){return cloneExportCamera(this.camera,aspect);}
-  renderCurrent(width:number,height:number,kind:'surface'|'skeleton'|'lineart',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
+  renderCurrent(width:number,height:number,kind:'surface'|'skeleton'|'lineart'|'guides',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
   getThumbnails(){const {width,height}=this.cameraState.output,w=180,h=Math.round(w*height/width);return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,w,h,'surface').toDataURL('image/png')}));}
   resize(){if(this.dragBefore)this.interruptPoseDrag();const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{const half=(this.camera.top-this.camera.bottom)/2;this.camera.left=-half*w/h;this.camera.right=half*w/h;}this.camera.updateProjectionMatrix();}
   // Damping is disabled; OrbitControls updates on its own pan/zoom events.
   // Updating it on idle frames would nudge exact top/bottom cameras off-axis.
   private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)&&now-this.motionNotify>100){this.motionNotify=now;this.update(false);}if(this.display==='lineart')this.renderLineArtViewport();else this.renderer.render(this.scene,this.camera);};
-  dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.lineArt?.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
+  dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.lineArt?.dispose();this.construction?.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
 }
