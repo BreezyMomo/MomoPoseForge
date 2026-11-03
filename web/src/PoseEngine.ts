@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {sitePath} from './sitePaths';
 import {inPresetScope,type PresetScope} from './presetScopes';
 import {MAX_PROPS,newSceneProp,validSceneProps,propAnchors,buildSceneProp,disposePropGroup,type SceneProp,type PropKind} from './sceneProps';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -257,8 +258,8 @@ export class PoseEngine {
       const {group}=buildProceduralRig(this.activeRig);if(this.disposed){disposeObject(group);return;}this.model.add(group);
     }else{
     const [modelResult, profileResult] = await Promise.allSettled([
-      new GLTFLoader().loadAsync(asset.url),
-      fetch(asset.profileUrl).then(r => { if (!r.ok) throw new Error('骨架定义载入失败'); return r.json(); }),
+      new GLTFLoader().loadAsync(sitePath(asset.url)),
+      fetch(sitePath(asset.profileUrl)).then(r => { if (!r.ok) throw new Error('骨架定义载入失败'); return r.json(); }),
     ]);
     if(modelResult.status==='rejected'||profileResult.status==='rejected'){
       if(modelResult.status==='fulfilled')disposeObject(modelResult.value.scene);
@@ -1010,7 +1011,7 @@ export class PoseEngine {
     const obsolete=()=>this.disposed||!!this.actors&&![...this.actors.values()].some(a=>a.state.model===model);
     if(!bytes){
       const builtin=rig.appearances?.find(a=>a.id===ref.id);
-      if(builtin){const response=await fetch(builtin.url);if(!response.ok)throw new Error('内置角色外观加载失败');bytes=await response.arrayBuffer();}
+      if(builtin){const response=await fetch(sitePath(builtin.url));if(!response.ok)throw new Error('内置角色外观加载失败');bytes=await response.arrayBuffer();}
       else{const saved=await characterLibrary.get(ref);if(!saved)throw new Error(`本机缺少角色外观“${ref.name}”，请先导入对应文件或完整工程包`);bytes=saved.bytes;}
     }
     if(obsolete())return;
