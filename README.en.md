@@ -42,7 +42,7 @@ Moving a supported hand, foot or paw uses IK; rotating a joint uses FK. Unpin an
 - [06 · Workspace and saving](docs/06-workspace-and-storage.en.md)
 - [FAQ](docs/faq.en.md) · [Development and GitHub Pages](docs/development.en.md)
 
-The editor's lower-left help button opens **Illustrated user manual** in the current UI language. The HTML manual is built and deployed with the editor.
+The top **Help** menu offers a quick guide, illustrated manual, FAQ and GitHub repository. Documentation follows the UI language. The lower-left help shortcut also opens the controls guide. The HTML manual is built and deployed with the editor.
 
 ## Run locally
 

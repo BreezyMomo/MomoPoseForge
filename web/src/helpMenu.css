@@ -1,0 +1,11 @@
+.pose-help-menu{position:relative;flex:none;font-size:12px}
+.pose-help-menu>summary{list-style:none;cursor:pointer;padding:0 5px;gap:4px}
+.pose-help-menu>summary::-webkit-details-marker{display:none}
+.pose-help-menu[open]>summary,.pose-help-menu>summary:hover{color:var(--text);background:var(--ui-hover);border-radius:var(--ui-control-radius)}
+.pose-help-menu>.header-dropdown-panel{position:absolute;top:calc(100% + 8px);right:0;z-index:1100;display:flex;flex-direction:column;gap:3px;min-width:210px;max-width:calc(100vw - 28px);max-height:calc(100dvh - 120px);overflow:auto;padding:6px;color:var(--ui-text);background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:var(--ui-window-radius);box-shadow:0 8px 24px var(--ui-shadow)}
+.pose-help-menu:not([open])>.header-dropdown-panel{display:none}
+.pose-help-menu .header-dropdown-panel :is(button,a){display:block;width:100%;padding:9px 12px;text-align:left;font:inherit;line-height:1.5;white-space:nowrap;border:0;border-radius:var(--ui-control-radius);color:inherit;background:transparent;text-decoration:none}
+.pose-help-menu .header-dropdown-panel :is(button,a):hover{background:var(--ui-hover)}
+.pose-help-menu :is(summary,button,a):focus-visible{outline:2px solid var(--ui-accent-text,var(--accent));outline-offset:2px}
+.pose-help-menu hr{width:100%;border:0;border-top:1px solid var(--ui-line);margin:4px 0}
+@media(max-width:450px){.app-shell .top-actions{position:relative;flex-wrap:wrap;row-gap:6px}.pose-help-menu{position:static}.pose-help-menu .header-dropdown-panel :is(button,a){min-height:40px}}

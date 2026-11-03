@@ -10,7 +10,7 @@ Open the [editor](https://breezymomo.github.io/MomoPoseForge/). A fresh visit lo
 
 ![PoseForge workspace](images/en/workspace.jpg)
 
-- **Top bar**: project name, layout, language, appearance, undo/redo, open/save and export.
+- **Top bar**: project name, layout, language, appearance, Help, undo/redo, open/save and export. **Help** opens the quick guide, illustrated manual and FAQ.
 - **Pose library**: scene characters, selected actor's rig, presets, favorites and animation.
 - **Viewport**: select controls, move or rotate joints and inspect the scene.
 - **Five views**: five output directions of the same scene. Select a thumbnail to inspect it in the main viewport.

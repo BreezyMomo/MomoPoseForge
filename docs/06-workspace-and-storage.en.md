@@ -18,6 +18,14 @@ The language selector supports Simplified Chinese and English. Fixed UI text and
 
 Layout, appearance and language are site preferences, outside project data and pose undo.
 
+## Help menu
+
+The top **Help** dropdown follows TextureForge: **Quick guide** opens controls in the current page; **Illustrated user manual** and **Frequently asked questions** open the matching language documentation in new tabs; **GitHub repository** opens the project home.
+
+![Top-bar Help menu](images/en/help-menu.jpg)
+
+Click outside, move keyboard focus out or press Escape to dismiss. Enter / Space opens it, Tab reaches the entries, and Escape returns focus to Help. The quick guide follows the selected rig's controls without changing actor poses or project data.
+
 ## Choose a save format
 
 | Method | Contents | Use |
