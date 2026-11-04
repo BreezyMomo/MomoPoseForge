@@ -39,6 +39,7 @@ import {retargetMixamoMotion} from './mixamoMotion';
 import {motionLibrary,packMotionAsset,unpackMotionAsset,type MotionAsset} from './motionLibrary';
 import {plantedFoot,solePoint,soleBall,type FootContactMode} from './footContacts';
 import {VIEW_DIRECTIONS,normalizeViewNames,isDirectionName,viewDirectionId,type ViewDirectionId} from './viewDirections';
+import {snapshotModelExport,type ModelExportOptions} from './modelExport';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 // These routines are the X Bot humanoid strategy. Generic FK rigs never enter them.
@@ -317,6 +318,14 @@ export class PoseEngine {
     this.stashActor();const doc=this.snapshot();return {format:'momo-pose-forge-scene',version:1,name:this.name,activeActor:this.activeActorId,actors:[...(this.actors?.values()??[])].map(a=>({id:a.id,name:a.name,visible:a.visible,locked:a.locked,pose:actorPose(this.usingActor(a,()=>this.snapshot()))})),views:doc.views,camera:doc.camera,referenceImage:doc.referenceImage,props:doc.props};
   }
   actorMotions(){this.stashActor();return [...(this.actors?.values()??[])].map(a=>({actorId:a.id,name:a.name,rig:a.state.rigDefinition,clips:a.state.motion?.importedClips()??[],state:a.state.motion?.state()}));}
+  snapshotModelExport(options:ModelExportOptions){
+    if(!this.ready||this.disposed||this.sceneLoad)throw new Error('pose.modelExportUnavailable');
+    this.fly?.stop();
+    this.stashActor();
+    const slots=[...(this.actors?.values()??[])].filter(a=>options.scope==='selected'?a.id===this.activeActorId&&a.visible:a.visible);
+    if(slots.some(a=>a.state.motion?.active)||this.motion?.active)throw new Error('pose.previewNotice');
+    return snapshotModelExport({name:this.name,actors:slots.map(a=>({id:a.id,name:a.name,rig:a.state.rigDefinition,appearance:a.state.appearance?.name,model:a.state.model})),props:options.scope==='scene'?this.propLayer:undefined},options);
+  }
   selectedThumbnail(){const actors=[...(this.actors?.values()??[])],visibility=actors.map(a=>({a,visible:a.visible})),center=this.center.clone(),span=this.span,propsVisible=this.propLayer?.visible;try{actors.forEach(a=>{a.visible=a.id===this.activeActorId;});if(this.propLayer)this.propLayer.visible=false;this.fit(false,true);return this.renderImage(DEFAULT_VIEWS[1],112,136,'surface').toDataURL('image/webp',.8);}finally{visibility.forEach(({a,visible})=>{a.visible=visible;});if(this.propLayer&&propsVisible!==undefined)this.propLayer.visible=propsVisible;this.center.copy(center);this.span=span;}}
   presetThumbnails(){
     const before=this.snapshot(),actors=this.actors,info=this.onInfo,commit=this.onCommit,center=this.center.clone(),span=this.span,camera=structuredClone(this.cameraState),visibility=[...(actors?.values()??[])].filter(a=>a.id!==this.activeActorId).flatMap(a=>[a.state.model,a.state.helpers,a.state.boneDisplay].map(object=>({object,visible:object.visible}))),result:Record<string,string>={};

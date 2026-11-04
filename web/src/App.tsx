@@ -2,6 +2,7 @@ import {t,useLanguage,language} from './workbenchState';
 import {WorkbenchShell} from './WorkbenchShell';
 import {WorkbenchPreferences} from './WorkbenchPreferences';
 import {HelpMenu} from './HelpMenu';
+import {ModelExportPanel} from './ModelExportPanel';
 import type {DockWorkspace} from '@momo/workbench/dock';
 import { useCallback, useEffect, useRef, useState, type ElementType } from 'react';
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpRight, Bone, Box, Camera, Check, ChevronDown, ChevronRight, CircleHelp, Copy, Download, Expand, FolderOpen, Grid2X2, Hand, ImagePlus, Layers2, LoaderCircle, LockKeyhole, Maximize, MousePointer2, Move3D, Plus, Pencil, Rotate3D, RotateCcw, Search, Settings2, Undo2, Redo2, UnlockKeyhole, X } from 'lucide-react';
@@ -72,6 +73,7 @@ export default function App(){
   const [mode,setMode]=useState<'translate'|'rotate'>('translate'),[space,setSpace]=useState<'world'|'local'>('world'),[display,setDisplay]=useState<'surface'|'skeleton'|'lineart'>('surface');
   const [more,setMore]=useState(true),[grid,setGrid]=useState(true),[view,setView]=useState('free'),[leftOpen,setLeftOpen]=useState(false),[rightOpen,setRightOpen]=useState(false);
   const [exportOpen,setExportOpen]=useState(false),[helpOpen,setHelpOpen]=useState(false),[cameraOpen,setCameraOpen]=useState(false),[exporting,setExporting]=useState(false),[progress,setProgress]=useState('');
+  const [exportKind,setExportKind]=useState<'images'|'model'>('images');
   const [options,setOptions]=useState<ExportOptions>({scope:'five',surface:true,lineart:false,skeleton:false,keypoints:false,depth:false,normal:false,sheet:true,project:true,transparent:false,hideOccludedHands:true});
   const [exportPreviewKind,setExportPreviewKind]=useState<RenderKind>('surface'),[exportPreviews,setExportPreviews]=useState<Thumbnail[]>([]),[previewBusy,setPreviewBusy]=useState(false),[previewError,setPreviewError]=useState('');
   const [exportPreviewEpoch,setExportPreviewEpoch]=useState(0);
@@ -164,7 +166,7 @@ export default function App(){
   },[]);
   useEffect(()=>{if(exportOpen){exportDialog.current?.showModal();if(exportDialog.current)exportDialog.current.scrollTop=0;}else exportDialog.current?.close();},[exportOpen]);
   useEffect(()=>{
-    const engine=engineRef.current;if(!exportOpen||!engine?.ready)return;let alive=true;
+    const engine=engineRef.current;if(!exportOpen||exportKind!=='images'||!engine?.ready)return;let alive=true;
     setPreviewBusy(true);setPreviewError('');setExportPreviews([]);
     void(async()=>{try{
       const slots=options.scope==='five'?structuredClone(engine.views):[{id:'current',name:'当前视角',azimuth:0,elevation:0}];
@@ -174,7 +176,7 @@ export default function App(){
       if(alive)setExportPreviews(previews);
     }catch(e){if(alive)setPreviewError(`预览生成失败：${(e as Error).message}`);}finally{if(alive)setPreviewBusy(false);}})();
     return()=>{alive=false;};
-  },[exportOpen,exportPreviewKind,options.scope,options.hideOccludedHands,current,exportPreviewEpoch]);
+  },[exportOpen,exportKind,exportPreviewKind,options.scope,options.hideOccludedHands,current,exportPreviewEpoch]);
   useEffect(()=>{
     if(!exportOpen)return;let frame=0;
     const resize=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>setExportPreviewEpoch(n=>n+1));};
@@ -232,7 +234,7 @@ export default function App(){
         <div className="history-actions"><IconButton icon={Undo2} label={t('pose.undo')} disabled={previewing||characterBusy||switching||!undoStack.current.length} onClick={undo}/><IconButton icon={Redo2} label={t('pose.redo')} disabled={previewing||characterBusy||switching||!redoStack.current.length} onClick={redo}/></div>
         <button className="text-button open-project" disabled={!info.ready||switching||characterBusy} onClick={()=>fileInput.current?.click()}><FolderOpen size={16}/>{t('pose.open')}</button>
         <button className="text-button save-project" disabled={!info.ready||previewing||characterBusy||switching} onClick={()=>setSaveOpen(true)}><ArrowDownToLine size={16}/>{t('pose.save')}</button>
-        <button className="primary-button" disabled={!info.ready||referenceBusy||switching||previewing||characterBusy} onClick={()=>setExportOpen(true)}><Download size={16}/>{t('pose.export')}<span className="desktop-only">{t('pose.references')}</span></button>
+        <button className="primary-button" disabled={!info.ready||referenceBusy||switching||previewing||characterBusy} onClick={()=>setExportOpen(true)}><Download size={16}/>{t('pose.export')}</button>
       </div>
       <input ref={fileInput} className="visually-hidden" type="file" accept=".poseforge,.json,application/json" onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.target.value='';}}/>
     </header>
@@ -297,8 +299,10 @@ export default function App(){
 
     {assetsOpen&&engineRef.current&&<AssetManager engine={engineRef.current} onClose={()=>setAssetsOpen(false)} onBusy={setCharacterBusy}/>}
     {saveOpen&&engineRef.current&&<ProjectSaveDialog engine={engineRef.current} onClose={()=>setSaveOpen(false)} onBusy={setCharacterBusy}/>}
-    <dialog ref={exportDialog} className="export-dialog" onCancel={e=>{if(exporting){e.preventDefault();exportAbort.current?.abort();}else setExportOpen(false);}} onClose={()=>{if(!exporting)setExportOpen(false);}}>
-      <div className="dialog-header"><div><span className="dialog-eyebrow">{t('pose.delivery')}</span><h2>{t('pose.exportTitle')}</h2></div><IconButton icon={X} label={t('pose.closeExport')} disabled={exporting} onClick={()=>setExportOpen(false)}/></div>
+    <dialog ref={exportDialog} className="export-dialog" aria-labelledby="pose-export-title" onCancel={e=>{if(exporting){e.preventDefault();exportAbort.current?.abort();}else setExportOpen(false);}} onClose={()=>{if(!exporting)setExportOpen(false);}}>
+      <div className="dialog-header"><div><span className="dialog-eyebrow">{t('pose.delivery')}</span><h2 id="pose-export-title">{t(exportKind==='model'?'pose.modelExportTitle':'pose.exportTitle')}</h2></div><IconButton icon={X} label={t('pose.closeExport')} disabled={exporting} onClick={()=>setExportOpen(false)}/></div>
+      <div className="export-format-tabs" role="group" aria-label={t('pose.exportFormat')}><button disabled={exporting} aria-pressed={exportKind==='images'} onClick={()=>setExportKind('images')}>{t('pose.imageExport')}</button><button disabled={exporting} aria-pressed={exportKind==='model'} onClick={()=>setExportKind('model')}>{t('pose.modelExportTab')}</button></div>
+      {exportKind==='model'&&exportOpen&&engineRef.current?<ModelExportPanel engine={engineRef.current} busy={exporting} onBusy={setExporting} abortRef={exportAbort} onDone={()=>{setExportOpen(false);notify(t('pose.modelExportDone'));}}/>:exportKind==='images'&&<>
       <p className="dialog-description">{t((info.actors?.length??0)>1?'pose.sceneExportHelp':'pose.exportIntro')}</p>
       {exportPreviewKind==='lineart'&&<label className="setting-row"><span>{t('pose.lineWidth')}</span><input aria-label={t('pose.lineWidth')} type="range" min="0.5" max="3" step="0.25" value={camera.lineArt?.lineWidth??1.25} onChange={e=>{engineRef.current?.setLineWidth(Number(e.target.value));setExportPreviewEpoch(n=>n+1);}}/><span>{camera.lineArt?.lineWidth??1.25}</span></label>}
       {(exportPreviewKind==='lineart'||exportPreviewKind==='guides')&&<><label className="setting-row"><span>{t('pose.constructionGuides')}</span><input type="checkbox" role="switch" aria-label={t('pose.constructionGuides')} disabled={exportPreviewKind==='guides'||!engineRef.current?.hasDrawingGuideActors()} checked={exportPreviewKind==='guides'||!!camera.lineArt?.constructionGuides} onChange={e=>{engineRef.current?.setConstructionGuides(e.target.checked);setExportPreviewEpoch(n=>n+1);}}/></label><p className="field-help">{t('pose.guidesHelp')}</p></>}
@@ -312,6 +316,7 @@ export default function App(){
         <p className="field-help">{t((info.actors?.length??0)>1?'pose.sceneExportHelp':(engineRef.current?.hasHumanActors()??false)?'pose.exportHelp':'pose.genericExportHelp')}</p>
       </fieldset></div>
       {(info.actors?.length??0)>1&&<p className="field-help">{t('pose.sceneSkeletonFiles')}</p>}<div className="dialog-footer"><span>{exporting?<><LoaderCircle size={14} className="spin"/>{progress}</>:<><LockKeyhole size={13}/>{t('pose.localZip')}</>}</span>{exporting?<button onClick={()=>exportAbort.current?.abort()}>{t('pose.cancelExport')}</button>:<button className="primary-button" disabled={!Object.entries(options).some(([k,v])=>['surface','lineart','guides','skeleton','keypoints','depth','normal','sheet','project'].includes(k)&&v)} onClick={()=>void runExport()}><Download size={16}/>{t('pose.download')}</button>}</div>
+      </>}
     </dialog>
     <dialog ref={cameraDialog} className="camera-dialog" onCancel={()=>setCameraOpen(false)} onClose={()=>setCameraOpen(false)}><div className="dialog-header"><div><span className="dialog-eyebrow">{t('pose.composition')}</span><h2>{t('pose.camera')}</h2></div><IconButton icon={X} label={t('pose.closeCamera')} onClick={()=>setCameraOpen(false)}/></div><div className="camera-scroll">{cameraOpen&&<CameraPanel engine={engineRef.current} settings={camera} views={current?.views??DEFAULT_VIEWS} warning={info.framingWarning} notify={notify}/>}</div><div className="dialog-footer"><span>{t('pose.cameraSaveHelp')}</span><button className="primary-button" onClick={()=>setCameraOpen(false)}>{t('pose.backToPose')}</button></div></dialog>
     <dialog ref={helpDialog} className="help-dialog" onCancel={()=>setHelpOpen(false)} onClose={()=>setHelpOpen(false)}><div className="dialog-header"><h2>{t('pose.helpTitle')}</h2><IconButton icon={X} label={t('pose.closeHelp')} onClick={()=>setHelpOpen(false)}/></div><p>{t(activeRig.capabilities.hands?'pose.helpIntro':'pose.helpIntroGeneric')}</p><dl><dt>{t('pose.fly')}</dt><dd>{t('pose.flyHelp')}</dd><dt>{t('pose.pan')}</dt><dd>{t('pose.panHelp')}</dd><dt>{t('pose.zoom')}</dt><dd>{t('pose.zoomHelp')}</dd><dt>{t('pose.moveRotate')}</dt><dd>W / E</dd><dt>{t('pose.focusCharacter')}</dt><dd>F</dd><dt>{t('pose.undoRedo')}</dt><dd>Ctrl Z / Ctrl Shift Z</dd>{activeRig.capabilities.fullBodyIK&&<><dt>{t('pose.fullBodyIK')}</dt><dd>{t('pose.fullBodyHelp')}</dd></>}{activeRig.capabilities.mirror&&<><dt>{t('pose.liveSymmetry')}</dt><dd>{t('pose.liveSymmetryHelp')}</dd></>}{activeRig.strategy==='xbot-humanoid'?<><dt>{t('pose.poles')}</dt><dd>{t('pose.polesHelp')}</dd></>:<><dt>{t('pose.fkControl')}</dt><dd>{t('pose.fkHelp')}</dd>{activeRig.ik&&<><dt>{t(pawRig?'pose.pawIKControl':'pose.limbIKControl')}</dt><dd>{t(pawRig?'pose.pawIKHelp':'pose.limbIKHelp')}</dd></>}</>}</dl><p>{t('pose.referenceCameraHelp')}</p><p className="field-help">{t(activeRig.capabilities.openPose?'pose.storageHelp':'pose.storageHelpGeneric')}</p><p><a href={manualPath(language.interfaceLanguage())} target="_blank" rel="noreferrer">{t('pose.manual')} ↗</a> · <a href="https://github.com/BreezyMomo/MomoPoseForge" target="_blank" rel="noreferrer">{t('pose.repository')} ↗</a></p><button className="primary-button" onClick={()=>setHelpOpen(false)}>{t('pose.start')}</button></dialog>

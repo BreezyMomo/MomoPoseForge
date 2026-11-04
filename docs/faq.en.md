@@ -44,6 +44,10 @@ Human OpenPose currently supports X Bot / Y Bot only. Other rigs use generic joi
 
 Browser site storage does not follow you between computers, ports or URLs. Lightweight JSON only stores references. Transfer a complete `.poseforge`; the receiving app must support its rig versions.
 
+## Can I use my pose in Unity or another 3D application?
+
+Yes. Choose **Export → 3D model · GLB**. Static output bakes the shape; rigged output keeps skinning and a `PoseForge_CurrentPose` clip. Unity needs a GLB importer such as glTFast. Humans, Fox and mixed scenes are supported; editor IK, pins and full motions are not converted. See [3D export](05-camera-and-export.en.md#export-to-other-3d-applications).
+
 ## Are accounts, cloud sync or AI generation included?
 
 No. Editing/export run in the browser, and control images are for external tools. Direct ComfyUI integration remains planned.

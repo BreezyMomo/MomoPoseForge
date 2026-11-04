@@ -48,6 +48,23 @@ Human OpenPose has separate `people[]` entries with `actor_id`. Fox, BodyChan an
 
 The manifest records dimensions, views, channels and actors; asset notes retain credits. `project.scene.json` stores the scene, while legacy `project.pose.json` represents only the selected actor. Neither carries all source resources like a complete project bundle.
 
+## Export to other 3D applications
+
+Choose **Export → 3D model · GLB**, select the model type and scope, then **Download GLB**. Capture or cancel animation preview first.
+
+![GLB model type, scope and download](images/en/glb-export.png)
+
+- **Static posed model** bakes the current deformation into ordinary meshes without bones, for scene placement, composition and drawing reference.
+- **Keep skeleton and current pose** retains bones, skinning and current local transforms. A constant `PoseForge_CurrentPose` clip lasts about 1/30 second. It stores one pose rather than a full motion; apply it if the receiving application resets the pose.
+- **Visible scene** includes all visible characters and props. Locked actors remain included; hidden actors and props are excluded. Multiple instances of the same rig keep independent poses and resources.
+- **Selected character** includes only the selected visible actor, without other actors or props, retaining its scene position and orientation.
+
+Human, Fox and drawing rigs use the same export entry and their actual hierarchies. Fox is not converted into a human skeleton. The active appearance and textures are included; cached outfits are excluded. Appearance names and rig source information are retained in GLB metadata.
+
+GLB uses metres and Y-up coordinates; the receiving application may convert axes/units. Textures are embedded, but materials, lighting and rendering depend on that application. Editor handles, skeleton guide lines, ground grid, lights, cameras and reference images are excluded. IK controllers, joint limits, pins and inter-character contacts are not converted into engine controls.
+
+Unity requires a GLB importer such as [glTFast](https://github.com/Unity-Technologies/com.unity.cloud.gltfast/blob/main/Packages/com.unity.cloud.gltfast/Documentation~/ImportEditor.md) before placing the file in `Assets`. FBX export, full-motion export and automatic cross-rig retargeting are not included. GLB is for external 3D applications; keep a complete `.poseforge` project to continue editing in PoseForge.
+
 ## External AI workflows
 
 The site supplies control images/data rather than generating AI images or models. The downstream model/workflow must support the selected channel, dimensions, keypoint encoding and normal convention. Files do not become conditioning inputs automatically.

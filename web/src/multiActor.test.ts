@@ -36,6 +36,24 @@ function withRealHandles(e:PoseEngine){
 function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreaterThan(0);for(const h of e.handles)expect(h.getWorldPosition(new Vector3()).distanceTo(e.world(h.userData.part)),h.userData.part).toBeLessThan(1e-9);}
 function importedClip(e:PoseEngine){const root=e.rest.joints.Hips.position,id='c'.repeat(64),clip=new AnimationClip('Owned clip',1,[...Object.entries(e.rest.joints).map(([n,j])=>new QuaternionKeyframeTrack(`${n}.quaternion`,[0,1],[...j.quaternion,...j.quaternion])),new VectorKeyframeTrack('Hips.position',[0,1],[...root,...root])]);Object.assign(clip,{uuid:`${XBOT_RIG.id}@1:${id}:0:v1`});clip.userData={momoMotion:{assetId:id,fileName:'owned.fbx',format:'fbx',rig:XBOT_RIG.id,rigVersion:1,adapterVersion:1,sampleRate:30,root:'Hips',rootOrigin:root,mappedBones:20,ignoredTranslations:0,reference:'skin-bind'}};return clip;}
 
+describe('场景 GLB 导出范围与隔离',()=>{
+  it('八个同骨架与混合实例在保存恢复后独立导出；隐藏角色不参与，锁定角色保留',async()=>{
+    const e=fixture();await e.duplicateActor();await e.addActor(FOX_RIG);await e.addActor(FOX_RIG);await e.addActor(YBOT_RIG);await e.addActor(BODYCHAN_RIG);await e.addActor(BODYKUN_RIG);await e.addActor(XBOT_RIG);
+    const ids=e.actorList().map(a=>a.id);e.changeActor(ids[0],{visible:false});e.changeActor(ids[1],{locked:true});const prop=e.addProp('box'),hidden=e.addProp('chair');e.changeProp(hidden,{visible:false});
+    const saved=e.sceneSnapshot();await e.restoreScene(readSceneDocument(JSON.stringify(saved)),{},false);const before=e.sceneSnapshot();
+    for(const mode of ['static','rigged'] as const){const snapshot=e.snapshotModelExport({mode,scope:'scene'}),actors=snapshot.scene.children.filter(o=>o.userData.actorId);expect(actors).toHaveLength(7);expect(actors.map(o=>o.userData.actorId)).toEqual(ids.slice(1));const props=snapshot.scene.children.find(o=>o.userData.kind==='props')!;expect(props.children.map(o=>o.name)).toEqual([`prop:${prop}`]);snapshot.dispose();}
+    expect(e.sceneSnapshot()).toEqual(before);
+  });
+  it('只导出选中实例时不带其他角色、道具、控制手柄、相机或灯光，骨架显示仍有实体',async()=>{
+    const e=fixture();await e.addActor(FOX_RIG);e.addProp('box');e.setDisplay('skeleton');const before=e.sceneSnapshot(),id=e.info().activeActor;
+    const snapshot=e.snapshotModelExport({mode:'rigged',scope:'selected'});expect(snapshot.scene.children).toHaveLength(1);expect(snapshot.scene.children[0].userData.actorId).toBe(id);let surfaces=0;snapshot.scene.traverse(o=>{if(o instanceof Mesh)surfaces++;expect((o as any).isCamera).not.toBe(true);expect((o as any).isLight).not.toBe(true);});expect(surfaces).toBeGreaterThan(0);snapshot.dispose();expect(e.sceneSnapshot()).toEqual(before);
+    e.changeActor(id!,{visible:false});expect(()=>e.snapshotModelExport({mode:'static',scope:'selected'})).toThrow('pose.modelExportEmpty');
+  });
+  it('人体与狐狸之间切换骨架后使用各自模型；动画预览须先取姿',async()=>{
+    const e=fixture(),original=e.sceneSnapshot();await e.replaceActorRig(FOX_RIG);e.previewMotion(e.motion!.state().clips[0].id);expect(()=>e.snapshotModelExport({mode:'rigged',scope:'scene'})).toThrow('pose.previewNotice');e.cancelMotion();const snapshot=e.snapshotModelExport({mode:'static',scope:'selected'});expect(snapshot.scene.children[0].userData.rig).toBe(FOX_RIG.id);snapshot.dispose();await e.replaceActorRig(XBOT_RIG);expect(e.sceneSnapshot().actors[0].pose.joints).toEqual(original.actors[0].pose.joints);
+  });
+});
+
 describe('独立场景角色与原控制器',()=>{
   it('原创绘画素体左右手势可读回，改良头顶标记可恢复早期原型姿态',()=>{
     const e=fixture(DRAWING_FEMALE_RIG);for(const side of ['Left','Right'] as const)for(const g of HAND_GESTURES){const wrist=e.world(side+'Hand');e.applyHandGesture(side,g.values,g.name);expect(e.world(side+'Hand').distanceTo(wrist)).toBeLessThan(1e-9);const values=e.captureHand(side);for(const digit of Object.keys(g.values) as (keyof typeof g.values)[])for(let j=0;j<3;j++)expect(values[digit].curl[j]).toBeCloseTo(g.values[digit].curl[j],3);}
