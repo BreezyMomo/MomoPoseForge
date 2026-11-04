@@ -40,6 +40,9 @@ import {motionLibrary,packMotionAsset,unpackMotionAsset,type MotionAsset} from '
 import {plantedFoot,solePoint,soleBall,type FootContactMode} from './footContacts';
 import {VIEW_DIRECTIONS,normalizeViewNames,isDirectionName,viewDirectionId,type ViewDirectionId} from './viewDirections';
 import {snapshotModelExport,type ModelExportOptions} from './modelExport';
+import {createViewCamera} from './viewCameras';
+import {LiveViewPreviews,type LiveViewTarget} from './liveViewPreviews';
+import {createControlPoint,updateControlPoint,type ControlPointKind} from './controlPoints';
 
 const V = THREE.Vector3, Q = THREE.Quaternion;
 // These routines are the X Bot humanoid strategy. Generic FK rigs never enter them.
@@ -89,6 +92,8 @@ export class PoseEngine {
   display: 'surface' | 'skeleton' | 'lineart' = 'surface';
   private lineArt?:LineArtRenderer;
   private construction?:ConstructionGuides;
+  private livePreviews?:LiveViewPreviews;
+  private livePreviewError=false;
   view = 'free';
   warning = '';
   ready = false;
@@ -296,8 +301,7 @@ export class PoseEngine {
     for (const name of this.activeRig.editableJoints) {
       if(!this.bones[name])continue;
       const radius=rigFinger(this.activeRig,name) ? .0065 : this.effectors.includes(name) ? .022 : .016;
-      const handle = new THREE.Mesh(new THREE.SphereGeometry(radius,12,8), new THREE.MeshBasicMaterial({ color:'#b1b6b6', depthTest:false, transparent:true, opacity:.9 }));
-      handle.userData.part = name; handle.renderOrder = 100; this.helpers.add(handle); this.handles.push(handle);
+      const handle=createControlPoint(name,radius,this.controlPointKind(name));this.helpers.add(handle);this.handles.push(handle);
     }
     this.ready = true;
     if(actorOnly)return;
@@ -783,6 +787,10 @@ export class PoseEngine {
   }
   private translationControl(name=this.selected){return this.actorTransform||this.humanoid?(this.actorTransform||!!CHAINS[name]||name===this.activeRig.root||name==='Chest'||Object.values(CHAINS).some(c=>c[1]===name)):name===this.activeRig.root||!!this.activeRig.ik&&!!this.activeRig.chains[name];}
   canTranslate(name=this.selected){return this.translationControl(name)&&(this.actorTransform||!this.pins[name]&&!this.supportedPart(name));}
+  controlPointKind(name=this.selected):ControlPointKind{
+    if(this.pins[name]||this.supportedPart(name))return 'fixed';
+    return this.canTranslate(name)?'move':'rotate';
+  }
   setMode(mode: 'translate'|'rotate') { this.mode=mode==='translate'&&!this.translationControl()?'rotate':mode; this.transform.setMode(this.mode);this.transform.showX=this.transform.showZ=!this.actorTransform||this.mode!=='rotate';this.transform.showY=true; this.syncGizmo();if(this.ready)this.onInfo(this.info()); }
   setSpace(space:'world'|'local') { this.transform.setSpace(space); }
   private syncGizmo() {
@@ -1144,13 +1152,13 @@ export class PoseEngine {
   info():EngineInfo{
     const bone=this.bones[this.selected];const e=bone?new THREE.Euler().setFromQuaternion(bone.quaternion,'XYZ'):new THREE.Euler();
     const rotation=this.humanoid?[e.x,e.y,e.z].map(THREE.MathUtils.radToDeg) as Vec3:fkAngles(bone?.quaternion??new Q(),this.restRotation(),this.rigJoint());
-    return {...(this.ready&&this.activeRig.soles?{footContacts:this.footContactInfo()}:{}),...(this.actors?{actors:this.actorList(),activeActor:this.activeActorId,actorTransform:this.actorTransform,actorEditable:this.actorEditable}:{}),motion:this.motion?.state(),appearance:this.appearance,ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),fixedContacts:(this.activeRig.supportContacts??this.activeRig.contacts).filter(end=>this.pins[end]).length,warning:this.warning,symmetry:{...(this.symmetry??defaultSymmetry())},hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,props:structuredClone(this.props??[]),...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
+    return {controlKind:this.controlPointKind(),...(this.ready&&this.activeRig.soles?{footContacts:this.footContactInfo()}:{}),...(this.actors?{actors:this.actorList(),activeActor:this.activeActorId,actorTransform:this.actorTransform,actorEditable:this.actorEditable}:{}),motion:this.motion?.state(),appearance:this.appearance,ready:this.ready,view:this.view,navigating:this.fly?.active??false,selected:this.selected,position:bone?asVec(this.world(this.selected)):[0,0,0],rotation,pinned:!!this.pins[this.selected as Effector],orientationPinned:!!this.pins[this.selected as Effector]?.orientation,ground:this.ground,fullBody:this.fullBody??true,fixedFeet:Number(!!this.pins.LeftFoot)+Number(!!this.pins.RightFoot),fixedContacts:(this.activeRig.supportContacts??this.activeRig.contacts).filter(end=>this.pins[end]).length,warning:this.warning,symmetry:{...(this.symmetry??defaultSymmetry())},hands:{...this.hands},handDetail:this.handDetail??null,fingers:{Left:this.readHand('Left'),Right:this.readHand('Right')},forearmTwist:{Left:this.readForearm('Left'),Right:this.readForearm('Right')},toes:{Left:this.bones.LeftToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.LeftToeBase.quaternion,new V(1,0,0))):0,Right:this.bones.RightToeBase?THREE.MathUtils.radToDeg(twistAngle(this.bones.RightToeBase.quaternion,new V(1,0,0))):0},boneCount:Object.keys(this.bones).length,vertexCount:this.vertexCount,referenceImage:this.referenceImage,props:structuredClone(this.props??[]),...(this.camera?{camera:this.getCameraSettings(),framingWarning:this.framingWarning()}: {})};
   }
 
   /** Helpers are separate scene objects, so restoring bones alone leaves stale hit targets. */
   private syncHandles(){
     if(!this.ready)return;this.model.updateWorldMatrix(true,true);
-    for(const h of this.handles){const name=h.userData.part as string;const point=this.world(name);h.position.copy(h.parent?h.parent.worldToLocal(point):point);const finger=rigFinger(this.activeRig,name);h.visible=this.handDetail?finger?.side===this.handDetail:!finger&&(this.moreControls||name===this.activeRig.root||name===this.selected||this.effectors.includes(name));const m=h.material as THREE.MeshBasicMaterial;m.color.set(name===this.selected?'#e3b969':this.pins[name as Effector]?'#e6d5af':'#a4abaa');h.scale.setScalar(name===this.selected?1.4:1);}
+    for(const h of this.handles){const name=h.userData.part as string;const point=this.world(name);h.position.copy(h.parent?h.parent.worldToLocal(point):point);const finger=rigFinger(this.activeRig,name);h.visible=this.handDetail?finger?.side===this.handDetail:!finger&&(this.moreControls||name===this.activeRig.root||name===this.selected||this.effectors.includes(name));updateControlPoint(h,this.controlPointKind(name),name===this.selected);}
     if(!this.helpers)return;
     const contacts=this.footContactInfo();
     for(const [end,state] of Object.entries(contacts))for(const point of ['heel','ball'] as const){
@@ -1161,6 +1169,7 @@ export class PoseEngine {
   }
 
   private update(fit:boolean){
+    this.livePreviews?.invalidate();
     if(!this.ready)return;this.model.updateMatrixWorld(true);
     if(fit)this.fit(false);
     this.syncHandles();
@@ -1195,6 +1204,7 @@ export class PoseEngine {
     this.orbit.update();this.camera.position.copy(position);this.camera.quaternion.copy(rotation);this.camera.updateMatrixWorld(true);
   }
   private commitCamera(){
+    this.livePreviews?.invalidate();
     if(!this.ready||this.suppress)return;this.cameraState=this.getCameraSettings();this.onInfo(this.info());this.onCommit(this.snapshot(),false);
   }
   setCameraLock(locked:boolean){this.fly?.stop();this.cameraState.locked=locked;this.orbit.enabled=this.canNavigateCamera()&&!this.transform.dragging;this.commitCamera();}
@@ -1209,6 +1219,18 @@ export class PoseEngine {
     const slot=this.views.find(v=>v.id===id),preset=VIEW_DIRECTIONS.find(v=>v.id===direction);if(!slot||!preset)return;
     const rename=isDirectionName(slot.name);slot.azimuth=preset.azimuth;slot.elevation=preset.elevation;if(rename)slot.name=preset.name;
     this.fit(false);if(!this.cameraState.locked&&this.view===id)this.setView(id,false);this.commitCamera();
+  }
+  setViewProjection(id:string,projection:'orthographic'|'perspective'){
+    const slot=this.views.find(v=>v.id===id);if(!slot||!['orthographic','perspective'].includes(projection))return;
+    slot.projection=projection;if(!this.cameraState.locked&&this.view===id)this.setView(id,false);this.commitCamera();
+  }
+  setViewZoom(id:string,zoom:number){
+    const slot=this.views.find(v=>v.id===id);if(!slot||!Number.isFinite(zoom))return;
+    slot.zoom=THREE.MathUtils.clamp(zoom,.25,4);if(!this.cameraState.locked&&this.view===id)this.setView(id,false);this.commitCamera();
+  }
+  setViewFov(id:string,fov:number){
+    const slot=this.views.find(v=>v.id===id);if(!slot||!Number.isFinite(fov))return;
+    slot.fov=THREE.MathUtils.clamp(fov,15,100);if(!this.cameraState.locked&&this.view===id)this.setView(id,false);this.commitCamera();
   }
   setFov(fov:number){
     if(this.cameraState.locked||!Number.isFinite(fov))return;this.fly?.stop();this.cameraState.fov=THREE.MathUtils.clamp(fov,15,100);
@@ -1235,23 +1257,23 @@ export class PoseEngine {
     return clipped.length?`${clipped.map(v=>v.name).join('、')}可能超出画幅` : '';
   }
   fit(updateCamera=true,force=false){
+    this.livePreviews?.invalidate();
     this.cameraState??=defaultCameraSettings();
     if(this.cameraState.framing.locked&&!force){this.center.fromArray(this.cameraState.framing.center);this.span=this.cameraState.framing.verticalSpan;return;}
     this.model.updateMatrixWorld(true);
     this.model.traverse(o=>{if(o instanceof THREE.SkinnedMesh){o.skeleton.update();o.computeBoundingBox();}});
     const box=this.sceneBounds();if(box.isEmpty())return;
     box.getCenter(this.center);
-    let maxY=0,maxX=0;
-    for(const slot of this.views){const cam=this.viewCamera(slot,1);cam.updateMatrixWorld();const inv=cam.matrixWorldInverse;for(let i=0;i<8;i++){const p=new V(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z).applyMatrix4(inv);maxX=Math.max(maxX,Math.abs(p.x));maxY=Math.max(maxY,Math.abs(p.y));}}
-    this.span=Math.max(maxY*2,maxX*2/(this.cameraState.output.width/this.cameraState.output.height))*1.18;
+    let span=0;const aspect=this.cameraState.output.width/this.cameraState.output.height;
+    for(const slot of this.views){const rotation=this.viewCamera(slot,1).quaternion.clone().invert(),tan=slot.projection==='perspective'?Math.tan(THREE.MathUtils.degToRad(slot.fov??35)/2):0;for(let i=0;i<8;i++){
+      const p=new V(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z).sub(this.center).applyQuaternion(rotation);
+      span=Math.max(span,2*Math.max(Math.abs(p.y),Math.abs(p.x)/aspect)*1.18+2*Math.max(0,p.z)*tan);
+    }}
+    this.span=span;
     if(updateCamera&&this.camera instanceof THREE.OrthographicCamera){const aspect=this.host.clientWidth/Math.max(1,this.host.clientHeight);this.camera.top=this.span/2;this.camera.bottom=-this.span/2;this.camera.left=-this.span*aspect/2;this.camera.right=this.span*aspect/2;this.camera.updateProjectionMatrix();}
   }
   viewCamera(slot:ViewSlot,aspect=.75){
-    const half=this.span/2,cam=new THREE.OrthographicCamera(-half*aspect,half*aspect,half,-half,.01,50);
-    const a=THREE.MathUtils.degToRad(slot.azimuth),e=THREE.MathUtils.degToRad(slot.elevation);
-    if(Math.abs(slot.elevation)===90){const sign=Math.sign(slot.elevation);cam.position.set(0,sign*5,0);cam.up.set(-Math.sin(a),0,-sign*Math.cos(a));}
-    else cam.position.set(Math.sin(a)*Math.cos(e)*5,Math.sin(e)*5,Math.cos(a)*Math.cos(e)*5);
-    cam.position.add(this.center);cam.lookAt(this.center);cam.updateMatrixWorld();return cam;
+    return createViewCamera(slot,this.center,this.span,aspect);
   }
   setView(id:string,persist=true){
     if(this.cameraState?.locked&&persist)return;
@@ -1375,9 +1397,43 @@ export class PoseEngine {
   exportCamera(aspect:number){return cloneExportCamera(this.camera,aspect);}
   renderCurrent(width:number,height:number,kind:'surface'|'skeleton'|'lineart'|'guides',transparent=false){return this.renderImage({id:'current',name:'当前视角',azimuth:0,elevation:0},width,height,kind,transparent,this.exportCamera(width/height));}
   getThumbnails(){const {width,height}=this.cameraState.output,w=180,h=Math.round(w*height/width);return this.views.map(v=>({id:v.id,name:v.name,url:this.renderImage(v,w,h,'surface').toDataURL('image/png')}));}
+  attachViewPreview(id:string,canvas:HTMLCanvasElement){
+    this.livePreviews??=new LiveViewPreviews();return this.livePreviews.attach(id,canvas);
+  }
+  private renderViewPreviews(now:number){
+    if(!this.livePreviews||!this.ready||this.interactionBlocked||this.sceneLoad)return;
+    const output=this.cameraState.output;
+    try{this.livePreviews.render(now,output.width/output.height,targets=>{this.drawViewPreviews(targets);this.livePreviewError=false;});}
+    catch(error){if(!this.livePreviewError)console.warn('实时五视图暂时无法刷新',error);this.livePreviewError=true;}
+  }
+  private drawViewPreviews(targets:LiveViewTarget[]){
+    const renderer=this.renderer,buffer=renderer.getDrawingBufferSize(new THREE.Vector2()),ratio=renderer.getPixelRatio();
+    if(buffer.x<1||buffer.y<1)return;
+    const hidden=new Set<THREE.Object3D>([this.helpers,this.boneDisplay,this.grid,this.groundMesh,this.transform.getHelper()]);
+    for(const actor of this.actors?.values()??[]){hidden.add(actor.state.helpers);hidden.add(actor.state.boneDisplay);}
+    const visibility=[...hidden].map(object=>({object,visible:object.visible}));
+    const models=[...(this.actors?.values()??[])].map(actor=>({object:actor.state.model,visible:actor.state.model.visible,show:actor.visible}));
+    const previous={background:this.scene.background,override:this.scene.overrideMaterial,model:this.model.visible,target:renderer.getRenderTarget(),viewport:renderer.getViewport(new THREE.Vector4()),scissor:renderer.getScissor(new THREE.Vector4()),scissorTest:renderer.getScissorTest(),alpha:renderer.getClearAlpha(),autoClear:renderer.autoClear,shadows:renderer.shadowMap.autoUpdate};
+    try{
+      this.scene.background=new THREE.Color('#e7e8e5');this.scene.overrideMaterial=null;this.model.visible=true;
+      visibility.forEach(({object})=>{object.visible=false;});models.forEach(({object,show})=>{object.visible=show;});
+      renderer.setRenderTarget(null);renderer.setScissorTest(true);renderer.setClearAlpha(1);renderer.autoClear=true;renderer.shadowMap.autoUpdate=false;
+      for(const target of targets){
+        const slot=this.views.find(v=>v.id===target.id);if(!slot)continue;
+        const scale=Math.min(1,buffer.x/target.width,buffer.y/target.height),width=Math.max(1,Math.floor(target.width*scale)),height=Math.max(1,Math.floor(target.height*scale));
+        renderer.setViewport(0,0,width/ratio,height/ratio);renderer.setScissor(0,0,width/ratio,height/ratio);
+        renderer.render(this.scene,this.viewCamera(slot,target.width/target.height));
+        target.context.drawImage(renderer.domElement,0,buffer.y-height,width,height,0,0,target.width,target.height);
+      }
+    }finally{
+      visibility.forEach(({object,visible})=>{object.visible=visible;});models.forEach(({object,visible})=>{object.visible=visible;});this.model.visible=previous.model;
+      this.scene.background=previous.background;this.scene.overrideMaterial=previous.override;
+      renderer.setRenderTarget(previous.target);renderer.setViewport(previous.viewport);renderer.setScissor(previous.scissor);renderer.setScissorTest(previous.scissorTest);renderer.setClearAlpha(previous.alpha);renderer.autoClear=previous.autoClear;renderer.shadowMap.autoUpdate=previous.shadows;
+    }
+  }
   resize(){if(this.dragBefore)this.interruptPoseDrag();const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h);if(this.camera instanceof THREE.PerspectiveCamera)this.camera.aspect=w/h;else{const half=(this.camera.top-this.camera.bottom)/2;this.camera.left=-half*w/h;this.camera.right=half*w/h;}this.camera.updateProjectionMatrix();}
   // Damping is disabled; OrbitControls updates on its own pan/zoom events.
   // Updating it on idle frames would nudge exact top/bottom cameras off-axis.
-  private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)&&now-this.motionNotify>100){this.motionNotify=now;this.update(false);}if(this.display==='lineart')this.renderLineArtViewport();else this.renderer.render(this.scene,this.camera);};
-  dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.lineArt?.dispose();this.construction?.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
+  private animate=(now=performance.now())=>{if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);const seconds=this.lastFrame?(now-this.lastFrame)/1000:0;this.lastFrame=now;this.fly.update(seconds);if(this.motion?.tick(seconds)){this.livePreviews?.invalidate();if(now-this.motionNotify>100){this.motionNotify=now;this.update(false);}}this.renderViewPreviews(now);if(this.display==='lineart')this.renderLineArtViewport();else this.renderer.render(this.scene,this.camera);};
+  dispose(){if(this.disposed)return;this.disposed=true;this.sceneLoad?.abort();for(const a of this.actors?.values()??[])a.state.motion?.dispose();this.actors?.clear();cancelAnimationFrame(this.frame);this.motion?.dispose();this.livePreviews?.dispose();this.resizeObserver.disconnect();this.fly.dispose();this.renderer.domElement.removeEventListener('pointerdown',this.pointerDown);this.renderer.domElement.removeEventListener('pointercancel',this.interruptPoseDrag);this.renderer.domElement.removeEventListener('lostpointercapture',this.poseCaptureLost);window.removeEventListener('blur',this.interruptPoseDrag);this.renderer.domElement.ownerDocument.removeEventListener('visibilitychange',this.poseVisibility);this.orbit.dispose();this.transform.dispose();disposeObject(this.scene);this.lineArt?.dispose();this.construction?.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}
 }

@@ -6,6 +6,7 @@ import {DEFAULT_VIEWS} from './types';
 import {documentRig} from './files';
 import {requireRig} from './rigs';
 import {Matrix4,Quaternion,Vector3} from 'three';
+import {validViewSlots} from './viewCameras';
 export const MAX_ACTORS=8;
 export const SCENE_DRAFT_KEY='momo-pose-forge:scene-draft:v1';
 export type SceneActor={id:string;name:string;visible:boolean;locked:boolean;pose:PoseDocument};
@@ -24,6 +25,7 @@ export function readSceneDocument(text:string):SceneDocument{
   const ids=new Set<string>();
   for(const actor of doc.actors){if(!actor||typeof actor.id!=='string'||!/^[a-zA-Z0-9_-]{1,80}$/.test(actor.id)||ids.has(actor.id)||typeof actor.name!=='string'||!actor.name.trim()||actor.name.length>80||typeof actor.visible!=='boolean'||typeof actor.locked!=='boolean'||!actor.pose||actor.pose.format!=='momo-pose-forge'||actor.pose.version!==1)throw new Error('场景角色定义无效');ids.add(actor.id);const rig=requireRig(actor.pose.rig);if((actor.pose.rigVersion??1)!==rig.version)throw new Error('场景角色骨架版本不兼容');}
   if(!ids.has(doc.activeActor))throw new Error('场景缺少选中的角色');
+  if(!validViewSlots(doc.views))throw new Error('五视图相机设置无效');
   return structuredClone(doc);
 }
 export function poseWithScene(pose:PoseDocument,scene:SceneDocument):PoseDocument{return {...pose,name:scene.name,views:structuredClone(scene.views),camera:structuredClone(scene.camera),referenceImage:structuredClone(scene.referenceImage),props:structuredClone(scene.props)};}

@@ -15,7 +15,7 @@ Pose characters in your browser, compose scenes with people and a fox, and expor
 - **Create drawing references** with presets, partial presets on supported rigs, line art, human construction guides, a reference image and basic prop contact helpers.
 - **Capture animation frames** as editable static poses. The fox includes native clips; compatible Mixamo human FBX / GLB animation can be imported.
 - **Replace a character appearance** with a compatible skinned GLB / FBX, and manage local character and motion resources.
-- **Compose five shared views**, save camera bookmarks, change aspect ratio and resolution, and select true top/bottom directions.
+- **Compose five live views** with independent orthographic/perspective projection and zoom, save camera bookmarks, change aspect ratio and resolution, and select true top/bottom directions.
 - **Export useful channels**: shaded surfaces, line art, construction guides, skeletons, depth, normals and masks. X Bot / Y Bot provide human OpenPose; generic joints cover all visible characters.
 - **Use poses in other 3D applications**: export a static posed GLB, or retain bones, skinning and a current-pose clip. Export the selected character or the visible scene with embedded textures.
 - **Continue editing** with portable `.poseforge` projects, lightweight scene JSON, pose/hand favorites and undo/redo.

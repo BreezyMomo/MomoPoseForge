@@ -1,0 +1,5 @@
+.control-point-legend{position:absolute;left:16px;bottom:40px;z-index:2;display:flex;align-items:center;gap:12px;flex-wrap:wrap;pointer-events:none;font-size:11px;color:#c5cac2}
+.control-point-legend span{display:inline-flex;align-items:center;gap:5px}
+.control-point-swatch{display:inline-block;flex:none;width:7px;height:7px;border-radius:50%}
+.selected-part-dot{flex:none}
+@media(max-width:650px){.control-point-legend{bottom:34px;gap:10px}}

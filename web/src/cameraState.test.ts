@@ -26,6 +26,20 @@ async function fixture(){
 }
 const matrix=(e:PoseEngine)=>e.camera.matrixWorld.toArray();
 describe('斜角与垂直上下视图',()=>{
+  it('每个槽位独立投影、缩放和视野角，观察锁与其他角色姿态不受修改影响',async()=>{
+    const e=await fixture();e.setFramingLock(true);const body=e.snapshot().joints,frame=e.getCameraSettings().framing,others=structuredClone(e.views.slice(1));
+    e.setViewProjection('front','perspective');e.setViewZoom('front',1.5);e.setViewFov('front',55);
+    const camera=e.viewCamera(e.views[0],.75);expect(camera).toBeInstanceOf(PerspectiveCamera);expect(camera.zoom).toBe(1.5);expect((camera as PerspectiveCamera).fov).toBe(55);
+    expect(e.views.slice(1)).toEqual(others);expect(e.snapshot().joints).toEqual(body);expect(e.getCameraSettings().framing).toEqual(frame);
+    e.setView('front');expect(e.camera).toBeInstanceOf(PerspectiveCamera);e.setCameraLock(true);const observation=matrix(e);e.setViewProjection('front','orthographic');expect(matrix(e)).toEqual(observation);expect(e.viewCamera(e.views[0])).toBeInstanceOf(OrthographicCamera);
+    const doc=e.snapshot(),copy=await fixture();copy.apply(parseDocument(JSON.stringify(doc),copy.rest));expect(copy.views).toEqual(doc.views);expect(copy.getCameraSettings()).toEqual(doc.camera);
+  });
+  it('新投影字段严格校验，旧五视图保持原相机和精确上下视方向',async()=>{
+    const e=await fixture(),doc=e.snapshot();
+    for(const patch of [{projection:'fisheye'},{zoom:0},{zoom:4.01},{fov:NaN},{fov:101}]){const invalid=structuredClone(doc);Object.assign(invalid.views[0],patch);expect(()=>parseDocument(JSON.stringify(invalid),e.rest)).toThrow('五视图');}
+    const old=parseDocument(JSON.stringify(doc),e.rest);expect(old.views).toEqual(doc.views);expect(e.viewCamera(old.views[0])).toBeInstanceOf(OrthographicCamera);
+    for(const elevation of [-90,90]){const camera=e.viewCamera({...doc.views[0],elevation,projection:'perspective',zoom:1.2});expect(camera.getWorldDirection(new Vector3()).distanceTo(new Vector3(0,-Math.sign(elevation),0))).toBeLessThan(1e-12);expect(camera.matrixWorld.elements.every(Number.isFinite)).toBe(true);}
+  });
   it('结构辅助线设置可选且严格校验，不影响旧工程',()=>{
     const state=defaultCameraSettings();expect(validateCameraSettings(state)).toBe(true);state.lineArt={lineWidth:1.5,constructionGuides:true};expect(validateCameraSettings(state)).toBe(true);expect(validateCameraSettings({...state,lineArt:{lineWidth:1.5,constructionGuides:'true'}})).toBe(false);
   });
@@ -226,7 +240,7 @@ describe('相机、工程与五视图构图',()=>{
     const e=await fixture(),old=e.snapshot();delete old.camera;e.setCameraLock(true);e.setFramingLock(true);e.apply(parseDocument(JSON.stringify(old),e.rest));const camera=e.getCameraSettings();expect(camera.locked||camera.framing.locked).toBe(false);expect(camera.output).toEqual({width:768,height:1024});expect(validateCameraSettings(camera)).toBe(true);
   });
   it('画幅变化保持锁定的世界构图，并按实际宽高生成投影',async()=>{
-    const e=await fixture();e.setFramingLock(true);const frame=e.getCameraSettings().framing;expect(e.setOutputSize(256,2048)).toBe(true);expect(e.getCameraSettings().framing).toEqual(frame);const c=e.viewCamera(e.views[0],256/2048);expect((c.right-c.left)/(c.top-c.bottom)).toBe(.125);expect(e.setOutputSize(2049,512)).toBe(false);expect(e.setOutputSize(512.2,512)).toBe(false);
+    const e=await fixture();e.setFramingLock(true);const frame=e.getCameraSettings().framing;expect(e.setOutputSize(256,2048)).toBe(true);expect(e.getCameraSettings().framing).toEqual(frame);const c=e.viewCamera(e.views[0],256/2048) as OrthographicCamera;expect((c.right-c.left)/(c.top-c.bottom)).toBe(.125);expect(e.setOutputSize(2049,512)).toBe(false);expect(e.setOutputSize(512.2,512)).toBe(false);
   });
   it('拒绝损坏相机、零缩放、重复书签和非法画幅，且不修改原工程',async()=>{
     const e=await fixture(),original=e.snapshot();e.saveCameraBookmark('A');const doc=e.snapshot();

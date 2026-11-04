@@ -15,6 +15,12 @@
 
 Unavailable controls are not hidden general-purpose features. The legacy basic human and experimental drawing mannequin remain readable for old projects but are not offered for new actors.
 
+## Read the control colours
+
+The viewport key shows **blue for movable, orange for rotation only, and grey for pinned controls**. Selection keeps the capability colour and adds a larger marker with a white outline. The dot next to the part selector uses the same colour.
+
+Colours follow the active rig’s actual controls rather than joint names. X/Y Bot elbows and knees support position controls for their bend direction; intermediate joints without position controls on Fox and the drawing figures appear orange. Pins and supported toes appear grey, returning to their capability colour when released. A position-only pin may still allow rotation, depending on its orientation lock and rig.
+
 ## Use IK and FK together
 
 **IK (inverse kinematics)** moves a hand, foot or paw target and solves the preceding joints. Use it to decide where the endpoint belongs.

@@ -6,9 +6,11 @@
 
 ## Observation and output views
 
-Free observation is for editing. The five output slots use orthographic cameras. Defaults are Front, Oblique, Side, Oblique high (+45°) and Oblique low (−30°). The last two are not vertical top/bottom views.
+Free observation is for editing. The bottom five views update while posing, changing numeric controls, or playing animation, using the same visible scene. Each slot independently supports orthographic or perspective projection; old projects remain orthographic. Defaults are Front, Oblique, Side, Oblique high (+45°) and Oblique low (−30°). The last two are not vertical top/bottom views.
 
-Open **Camera and frame** to change directions/names or replace a slot with the current observation. Choose Top (+90°) or Bottom (−90°) for true vertical views. There are still five output slots.
+Use each preview’s projection selector and − / + zoom controls; click the percentage to reset zoom to 100%. The main viewport also has a projection switch at its top left. Click a preview to use that camera in the main viewport. On narrow screens, enable Show five views in the Layout menu if the panel is hidden; its previews scroll horizontally within the panel.
+
+Open **Camera and frame** to change directions, names, projection, zoom and perspective field of view, or replace a slot with the current observation direction. Copying a direction preserves the slot’s projection and zoom. Choose Top (+90°) or Bottom (−90°) for true vertical views. There are still five output slots.
 
 - **Observation camera lock** prevents accidental navigation.
 - **Five-view framing lock** retains the shared center and scale. Refit explicitly when posing moves content out of frame.
@@ -16,6 +18,8 @@ Open **Camera and frame** to change directions/names or replace a slot with the 
 - **Output frame** supports 256–2048 pixels on each side, including square, landscape, portrait and custom proportions.
 
 Automatic framing uses the union of visible actors and props. Hidden actors are omitted; locked actors remain included.
+
+Live previews retain their framing during a drag instead of continuously fitting the moving pose. Automatic fitting still runs when an edit is committed. For stable framing across edits, use the framing lock next to the five-view heading and refit explicitly when needed. Previews and exports share camera parameters; perspective or differently zoomed slots do not claim a shared orthographic scale. These settings belong to the shared scene and survive project restoration and actor/rig switches.
 
 ## Surfaces, line art and construction guides
 

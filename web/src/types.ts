@@ -6,9 +6,10 @@ import type {SymmetrySettings} from './symmetry';
 import type {SceneProp} from './sceneProps';
 import type {AppearanceRef} from './characterAppearance';
 import type {MotionState} from './motionPreview';
+import type {ControlPointKind} from './controlPoints';
 export const END_EFFECTORS = ['LeftHand', 'RightHand', 'LeftFoot', 'RightFoot'] as const;
 export type Effector = typeof END_EFFECTORS[number];
-export type ViewSlot = { id: string; name: string; azimuth: number; elevation: number };
+export type ViewSlot = { id: string; name: string; azimuth: number; elevation: number; projection?:'orthographic'|'perspective'; fov?:number; zoom?:number };
 export const DEFAULT_VIEWS: ViewSlot[] = [
   { id: 'front', name: '正面', azimuth: 0, elevation: 0 },
   { id: 'oblique', name: '斜侧', azimuth: 45, elevation: 0 },
@@ -54,6 +55,7 @@ export const PART_NAMES:Record<string,string>={...BODY_PART_NAMES,...FINGER_PART
 export type FingerValues={curl:[number,number,number];spread:number};
 export type HandValues=Record<Digit,FingerValues>;
 export type EngineInfo = {
+  controlKind?:ControlPointKind;
   footContacts?:Record<string,{mode:import('./footContacts').FootContactMode;angle:number;heel:Vec3;ball:Vec3;error:number}>;
   actors?:import('./sceneDocument').ActorSummary[];activeActor?:string;actorTransform?:boolean;actorEditable?:boolean;
   motion?:MotionState;appearance?:AppearanceRef;

@@ -6,6 +6,7 @@ import {GLTFLoader,type GLTF} from 'three/addons/loaders/GLTFLoader.js';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {PoseEngine} from './PoseEngine';
 import {XBOT_RIG,YBOT_RIG,DRAWING_FEMALE_RIG,BASIC_HUMAN_RIG,type RigDefinition} from './rigs';
+import {CONTROL_POINT_COLORS,createControlPoint} from './controlPoints';
 import {FOX_RIG} from './foxRig';
 import {BODYCHAN_RIG,BODYKUN_RIG} from './bodyFigureRigs';
 import {DEFAULT_VIEWS,type PoseDocument} from './types';
@@ -30,7 +31,7 @@ function fixture(rig:RigDefinition=XBOT_RIG,initialize=true){
 const actor=(e:PoseEngine,id=e.info().activeActor)=>e.sceneSnapshot().actors.find(a=>a.id===id)!;
 const camera=()=>{const c=new OrthographicCamera(-3,3,3,-1,.01,50);c.position.set(0,1,6);c.lookAt(0,1,0);c.updateMatrixWorld();return c;};
 function withRealHandles(e:PoseEngine){
-  e.handles=e.activeRig.editableJoints.filter(name=>e.bones[name]).map(name=>{const handle=new Mesh(new SphereGeometry(.01),new MeshBasicMaterial());handle.userData.part=name;e.helpers.add(handle);return handle;});
+  e.handles=e.activeRig.editableJoints.filter(name=>e.bones[name]).map(name=>{const handle=createControlPoint(name,.01);e.helpers.add(handle);return handle;});
   (e as any).update=(PoseEngine.prototype as any).update;(e as any).update(false);return e;
 }
 function expectHandlesAligned(e:PoseEngine){expect(e.handles.length).toBeGreaterThan(0);for(const h of e.handles)expect(h.getWorldPosition(new Vector3()).distanceTo(e.world(h.userData.part)),h.userData.part).toBeLessThan(1e-9);}
@@ -55,6 +56,30 @@ describe('场景 GLB 导出范围与隔离',()=>{
 });
 
 describe('独立场景角色与原控制器',()=>{
+  for(const rig of [XBOT_RIG,YBOT_RIG,FOX_RIG,BODYCHAN_RIG,BODYKUN_RIG,BASIC_HUMAN_RIG])it(`${rig.id}控制点按实际移动能力着色，选中保留类型颜色并显示独立外圈`,()=>{
+    const e=withRealHandles(fixture(rig)),before=e.sceneSnapshot();
+    for(const handle of e.handles){const name=handle.userData.part,kind=e.canTranslate(name)?'move':'rotate';expect(e.controlPointKind(name)).toBe(kind);expect((handle.material as MeshBasicMaterial).color.getHexString()).toBe(CONTROL_POINT_COLORS[kind].slice(1));expect(handle.getObjectByName('selection-halo')!.visible).toBe(name===e.selected);}
+    const rotate=e.handles.find(h=>!e.canTranslate(h.userData.part))!;e.select(rotate.userData.part);expect(e.info().controlKind).toBe('rotate');expect((rotate.material as MeshBasicMaterial).color.getHexString()).toBe(CONTROL_POINT_COLORS.rotate.slice(1));expect(rotate.getObjectByName('selection-halo')!.visible).toBe(true);expect(rotate.scale.x).toBe(1.4);
+    e.select(rig.root);expect(e.info().controlKind).toBe('move');const root=e.handles.find(h=>h.userData.part===rig.root)!;expect((root.material as MeshBasicMaterial).color.getHexString()).toBe(CONTROL_POINT_COLORS.move.slice(1));expect(rotate.getObjectByName('selection-halo')!.visible).toBe(false);
+    expect(e.sceneSnapshot().actors.map(a=>a.pose.joints)).toEqual(before.actors.map(a=>a.pose.joints));
+  });
+  it('同骨架和狐狸混合实例的固定颜色独立，解除固定及工程恢复重新读取实际能力',async()=>{
+    const e=withRealHandles(fixture()),first=e.info().activeActor!;e.loadActorRuntime=vi.fn(async rig=>withRealHandles(fixture(rig,false)).captureActorRuntime());
+    e.select('LeftHand');e.setPin(true);expect(e.info().controlKind).toBe('fixed');let hand=e.handles.find(h=>h.userData.part==='LeftHand')!;expect((hand.material as MeshBasicMaterial).color.getHexString()).toBe(CONTROL_POINT_COLORS.fixed.slice(1));
+    await e.duplicateActor();e.setPin(false);expect(e.info().controlKind).toBe('move');e.selectActor(first);expect(e.controlPointKind('LeftHand')).toBe('fixed');
+    await e.addActor(FOX_RIG);e.select('b_LeftHand_011');expect(e.info().controlKind).toBe('move');e.setPin(true);expect(e.info().controlKind).toBe('fixed');const saved=e.sceneSnapshot();
+    await e.restoreScene(readSceneDocument(JSON.stringify(saved)),{},false);expect(e.sceneSnapshot()).toEqual(saved);expect(e.info().controlKind).toBe('fixed');e.selectActor(first);hand=e.handles.find(h=>h.userData.part==='LeftHand')!;expect((hand.material as MeshBasicMaterial).color.getHexString()).toBe(CONTROL_POINT_COLORS.fixed.slice(1));
+    e.select('LeftHand');e.setPin(false);expect(e.info().controlKind).toBe('move');expect((hand.material as MeshBasicMaterial).color.getHexString()).toBe(CONTROL_POINT_COLORS.move.slice(1));
+  });
+  it('八角色混合场景共用独立投影的五视图，换骨架与工程恢复保留相机和其他角色',async()=>{
+    const e=fixture();e.view='free';await e.duplicateActor();for(const rig of [FOX_RIG,FOX_RIG,YBOT_RIG,BODYCHAN_RIG,BODYKUN_RIG,XBOT_RIG])await e.addActor(rig);
+    e.setViewProjection('oblique','perspective');e.setViewFov('oblique',48);e.setViewZoom('side',1.2);e.setFramingLock(true);
+    const saved=e.sceneSnapshot(),poses=saved.actors.map(a=>a.pose),views=structuredClone(e.views);
+    const selected=e.info().activeActor!;await e.replaceActorRig(FOX_RIG);expect(e.views).toEqual(views);expect(e.sceneSnapshot().actors.filter(a=>a.id!==selected).map(a=>a.pose)).toEqual(saved.actors.filter(a=>a.id!==selected).map(a=>a.pose));
+    await e.restoreScene(readSceneDocument(JSON.stringify(saved)),{},false);expect(e.sceneSnapshot()).toEqual(saved);expect(e.sceneSnapshot().actors.map(a=>a.pose)).toEqual(poses);
+    for(const slot of e.views){const camera=e.viewCamera(slot,.75),joints=e.sceneJoints(camera,768,1024);expect(joints.actors).toHaveLength(8);expect(e.openPose(camera,768,1024,false).people).toHaveLength(4);expect(camera.projectionMatrix.elements.every(Number.isFinite)).toBe(true);}
+    expect(e.sceneSnapshot()).toEqual(saved);
+  });
   it('原创绘画素体左右手势可读回，改良头顶标记可恢复早期原型姿态',()=>{
     const e=fixture(DRAWING_FEMALE_RIG);for(const side of ['Left','Right'] as const)for(const g of HAND_GESTURES){const wrist=e.world(side+'Hand');e.applyHandGesture(side,g.values,g.name);expect(e.world(side+'Hand').distanceTo(wrist)).toBeLessThan(1e-9);const values=e.captureHand(side);for(const digit of Object.keys(g.values) as (keyof typeof g.values)[])for(let j=0;j<3;j++)expect(values[digit].curl[j]).toBeCloseTo(g.values[digit].curl[j],3);}
     const legacy=e.snapshot();delete legacy.rigCalibrationVersion;legacy.joints.HeadTop_End.position=[0,.24,0];const saved=structuredClone(legacy);e.apply(parseDocument(JSON.stringify(legacy),e.rest));expect(e.bones.HeadTop_End.position.toArray()).toEqual(e.rest.joints.HeadTop_End.position);expect(e.snapshot().rigCalibrationVersion).toBe(2);legacy.rigCalibrationVersion=1;expect(()=>parseDocument(JSON.stringify(legacy),e.rest)).not.toThrow();legacy.rigCalibrationVersion=99;expect(()=>parseDocument(JSON.stringify(legacy),e.rest)).toThrow();for(const n of Object.keys(e.bones))if(n!=='HeadTop_End'){const actual=e.snapshot().joints[n];expect(actual.position).toEqual(saved.joints[n].position);actual.quaternion.forEach((q,i)=>expect(q).toBeCloseTo(saved.joints[n].quaternion[i],12));}
