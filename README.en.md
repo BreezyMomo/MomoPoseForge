@@ -67,6 +67,12 @@ The static site is written to `dist/`. `npm run build:pages` builds the editor a
 
 Shared layout, appearance, language and UI motion come from `@momo/workbench`. Its fixed package is included in `vendor/`; a standalone clone only needs `npm ci`, without sibling framework or TextureForge repositories. Do not copy another machine's `node_modules/`. Stop the dev server and rerun `npm ci` if dependencies cannot resolve. Startup and build check the required framework files.
 
+## License
+
+Copyright (c) 2026 BreezyMomo and contributors. The application is [GPL-3.0-only](LICENSE): commercial use is allowed; distributing modified versions or builds requires GPL compliance, including Corresponding Source and license notices.
+
+Momo-authored creative output and accompanying original shaders, importers, runtime components and helper scripts that we have authority to license are additionally offered under [MIT](licenses/MIT.txt) for integration into commercial projects. User content remains with its owners; third-party code, models, animations and assets retain their own terms. See [Output licensing](OUTPUT-LICENSE.en.md). The editor, complete offline editor HTML, CLI and MCP server remain GPL programs.
+
 ## Data, scope and credits
 
 Drafts, favorites and imported resources live in this browser's site storage. Computers, browsers, ports and hosted URLs do not share them automatically. Clearing site data can remove local work; save complete projects for backup. The editor does not run an online AI model; exported control images are intended for external workflows.
