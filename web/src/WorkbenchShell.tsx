@@ -5,7 +5,11 @@ import {createPoseLayout,POSE_WORKBENCH_PANELS,POSE_WORKBENCH_KEY} from './workb
 import {t,language} from './workbenchState';
 import '@momo/workbench/dock.css';
 import '@momo/workbench/motion.css';
+import '@momo/workbench/theme-tokens.css';
 import './workbench.css';
+import '@momo/workbench/appearance-settings.css';
+import '@momo/workbench/tabs.css';
+import '@momo/workbench/language-selector.css';
 
 type PanelId=typeof POSE_WORKBENCH_PANELS[number]['id'];
 export function WorkbenchShell({panels,menuHost,managerRef,onMessage}:{panels:Record<PanelId,ReactNode>;menuHost:RefObject<HTMLDivElement|null>;managerRef:RefObject<DockWorkspace|null>;onMessage:(message:string)=>void}){
