@@ -52,7 +52,7 @@ The manifest records dimensions, views, channels and actors; asset notes retain 
 
 Choose **Export → 3D model · GLB**, select the model type and scope, then **Download GLB**. Capture or cancel animation preview first.
 
-![GLB model type, scope and download](images/en/glb-export.png)
+![GLB model type, scope and download](images/en/glb-export.jpg)
 
 - **Static posed model** bakes the current deformation into ordinary meshes without bones, for scene placement, composition and drawing reference.
 - **Keep skeleton and current pose** retains bones, skinning and current local transforms. A constant `PoseForge_CurrentPose` clip lasts about 1/30 second. It stores one pose rather than a full motion; apply it if the receiving application resets the pose.
