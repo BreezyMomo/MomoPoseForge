@@ -18,6 +18,7 @@ import {validSoleContact} from './footContacts';
 import {normalizeViewNames} from './viewDirections';
 import {validViewSlots} from './viewCameras';
 import {usesLegacyCalibration} from './rigCalibration';
+import {trackCompletedExport,type ExportStats} from './siteAnalytics';
 
 const vector=(x:unknown,n:number)=>Array.isArray(x)&&x.length===n&&x.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=20);
 const quaternion=(x:unknown)=>vector(x,4)&&Math.abs((x as number[]).reduce((s,v)=>s+v*v,0)-1)<.02;
@@ -74,7 +75,7 @@ export function parseDocument(text:string,rest:PoseDocument,definition:RigDefini
   return structuredClone(d);
 }
 
-export function download(blob:Blob,name:string){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30_000);}
+export function download(blob:Blob,name:string,stats?:ExportStats){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30_000);if(stats)trackCompletedExport(stats);}
 export const safeName=(name:string)=>name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g,'-').slice(0,64)||'pose';
 export function saveProject(doc:PoseDocument){download(new Blob([JSON.stringify(doc,null,2)],{type:'application/json'}),`${safeName(doc.name)}.pose.json`);}
 const toBlob=(c:HTMLCanvasElement)=>new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('图片生成失败')),'image/png'));
@@ -165,7 +166,7 @@ export async function exportPose(engine:PoseEngine,options:ExportOptions,signal:
       const used=[...new Set(scene.actors.map(a=>a.pose.rig))].map(requireRig);zip.file('SCENE-ASSET-CREDITS.txt',used.map(r=>[r.name,r.id,r.license,r.sourceUrl,r.attribution?.authors,r.attribution?.source,r.attribution?.licenseUrl,r.attribution?.changes].filter(Boolean).join('\n')).join('\n\n'));
     }
     if(appearance)zip.file('CHARACTER.txt',[appearance.name,`SHA-256: ${appearance.id}`,customAppearance?`Appearance source: local ${(appearance.format??'glb').toUpperCase()} supplied by the user.`:'Appearance source: bundled Fox with a geometric scarf by MomoPoseForge.',customAppearance?'Asset attribution was not supplied with this local file.':'Original Fox attribution: see ASSET-CREDITS.txt.','Source assets are not embedded in this image-export ZIP. Save a full .poseforge project to carry custom characters and selected clips.'].join('\n'));
-    onProgress('正在打包文件');check();const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},()=>check());check();download(blob,`${safeName(doc.name)}.zip`);
+    onProgress('正在打包文件');check();const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}},()=>check());check();download(blob,`${safeName(doc.name)}.zip`,{format:'images-zip',scope:options.scope});
   }finally{
     // Rendering does not edit the pose. Re-applying an unchanged snapshot would
     // unnecessarily project joint limits again and introduce floating-point drift.

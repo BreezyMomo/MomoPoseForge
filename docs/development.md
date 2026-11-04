@@ -44,6 +44,18 @@ npm run build:pages
 
 本地执行 `npm run preview -- --base=/MomoPoseForge/`，访问 `http://127.0.0.1:4173/MomoPoseForge/`；手册位于同一站点的 `docs/index.html`，英文为 `docs/index.en.html`。改用其他仓库名或自定义域名时，按实际路径调整构建和预览的 `--base`。
 
+## 正式站点访问统计
+
+正式在线编辑器使用独立的百度统计站点 **23663044**，与 MomoTextureForge 分开查看。入口 `web/src/main.tsx` 只在生产构建启动 `siteAnalytics.ts`；该模块仅允许 HTTPS 的 `breezymomo.github.io/MomoPoseForge/` 和其 `index.html`。本地开发、静态预览、其他域名、其他 GitHub 项目及手册页面不加载统计代码。
+
+每次打开编辑器手动发送一次固定路径 `/MomoPoseForge/` 的 PV，关闭自动 PV 与自动点击采集；查询参数和 URL 片段不进入上报路径，来源只保留 origin。统计脚本异步加载，`referrerPolicy=origin`；不使用 `no-referrer`，因为百度可能返回空脚本。不主动上报工程名、文件名、姿势、角色、模型、参考图片或其他用户内容。百度仍会处理统计所需的网络、浏览器信息和访客标识。
+
+在百度统计 **访问分析 → 事件分析** 查看类别 `export`、操作 `download`，标签为固定的 `格式/范围`：`images-zip/five`、`images-zip/current`、`glb-static/scene`、`glb-static/selected`、`glb-rigged/scene`、`glb-rigged/selected`。一次图片 ZIP 计一次，混合骨架和多角色不额外计数。仅在文件生成完成并发起下载后记录；取消、失败、预览及保存工程不计入，浏览器无法确认文件最终写入硬盘。统计被拦截或网络失败不影响编辑与导出。
+
+运行 `npm test -- web/src/siteAnalytics.test.ts` 验证正式域名隔离、重复初始化、URL 与来源清理、有限事件字段及下载完成边界，再执行 `npm run build:pages`。部署后核验百度脚本有实际代码并查看对应站点的代码安装检查与访问报告；新站点代码及报表可能延迟生效，不能只凭 script 标签认定数据已入库。
+
+接口参考：[百度统计 PV API](https://tongji.baidu.com/holmes/Tongji/%E7%BB%9F%E8%AE%A1%E5%BC%80%E6%94%BE%E6%89%8B%E5%86%8C/JS-API%E6%8A%80%E6%9C%AF%E6%96%87%E6%A1%A3/_trackPageview/)。
+
 ## 自动部署
 
 仓库 Settings → Pages 的 Source 设为 **GitHub Actions**。`.github/workflows/pages.yml` 在推送 `main` 或手动运行时执行：安装锁定依赖、依赖检查测试、功能测试、Pages 构建、上传 `dist/` 并发布。部署任务仅使用 Pages 所需的权限，不把源码树整体当站点上传。

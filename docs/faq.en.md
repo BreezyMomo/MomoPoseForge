@@ -52,6 +52,10 @@ Yes. Choose **Export → 3D model · GLB**. Static output bakes the shape; rigge
 
 No. Editing/export run in the browser, and control images are for external tools. Direct ComfyUI integration remains planned.
 
+## What does the online editor measure?
+
+The official GitHub Pages editor uses Baidu Analytics for basic traffic and exports that finish generation and initiate a download. Project names, poses, models and image content are not actively submitted, and automatic click collection is disabled. Baidu still processes network/browser information and visitor identifiers needed for statistics. Local development and other domains do not load analytics. See [Analytics](development.en.md#official-site-analytics).
+
 ## Blank screen, missing models or slow interaction
 
 Check WebGL2 and whether scripts/models loaded successfully. Reduce actor count, hide unnecessary actors or lower output dimensions. Subdirectory deployment needs the Pages build described in [Development](development.en.md).

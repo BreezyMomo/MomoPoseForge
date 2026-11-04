@@ -77,6 +77,8 @@ Momo-authored creative output and accompanying original shaders, importers, runt
 
 Drafts, favorites and imported resources live in this browser's site storage. Computers, browsers, ports and hosted URLs do not share them automatically. Clearing site data can remove local work; save complete projects for backup. The editor does not run an online AI model; exported control images are intended for external workflows.
 
+The official GitHub Pages editor uses Baidu Analytics for basic traffic and completed-export counts. It does not actively report project names, poses, models or image content, and automatic click collection is disabled. Local development and other domains do not load analytics. See [Analytics](docs/development.en.md#official-site-analytics).
+
 Characters may overlap. Automatic inter-character contact, collision avoidance and arbitrary rig retargeting are not implemented. The fox has no human hand poses or sole support. Appearance import requires a compatible rig and does not auto-rig arbitrary models.
 
 Character assets keep their respective licenses and credits:

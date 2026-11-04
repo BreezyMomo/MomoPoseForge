@@ -12,7 +12,7 @@ export function ModelExportPanel({engine,busy,onBusy,onDone,abortRef}:{engine:Po
   useEffect(()=>()=>{abortRef.current?.abort();},[abortRef]);
   const save=async()=>{
     if(running.current)return;running.current=true;onBusy(true);setError('');const abort=new AbortController();abortRef.current=abort;
-    try{const snapshot=engine.snapshotModelExport(options),bytes=await encodeModelGlb(snapshot,abort.signal);download(new Blob([bytes],{type:'model/gltf-binary'}),`${safeName(engine.name)}-${options.scope}-${options.mode}.glb`);onDone();}
+    try{const snapshot=engine.snapshotModelExport(options),bytes=await encodeModelGlb(snapshot,abort.signal);download(new Blob([bytes],{type:'model/gltf-binary'}),`${safeName(engine.name)}-${options.scope}-${options.mode}.glb`,{format:options.mode==='static'?'glb-static':'glb-rigged',scope:options.scope});onDone();}
     catch(e){if((e as Error).name!=='AbortError'){const message=(e as Error).message;setError(message.startsWith('pose.')?t(message):`${t('pose.modelExportFailed')}：${message}`);}}
     finally{running.current=false;onBusy(false);if(abortRef.current===abort)abortRef.current=null;}
   };

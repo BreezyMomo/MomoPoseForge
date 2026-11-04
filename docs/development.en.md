@@ -44,6 +44,18 @@ This sets Vite base to `/MomoPoseForge/`. `sitePaths.ts` resolves models, profil
 
 Run `npm run preview -- --base=/MomoPoseForge/`, then open `http://127.0.0.1:4173/MomoPoseForge/`; the manual is `docs/index.html`, or `docs/index.en.html` in English. Change both build and preview `--base` for another repository name or a custom domain.
 
+## Official-site analytics
+
+The official editor uses Baidu site **23663044**, separately from MomoTextureForge. `web/src/main.tsx` starts `siteAnalytics.ts` only in production builds. Its HTTPS allowlist accepts `breezymomo.github.io/MomoPoseForge/` and its `index.html`. Local development, static previews, other domains, other GitHub projects and manual pages do not load analytics.
+
+Each editor load sends one manual PV for `/MomoPoseForge/`. Automatic PV and click collection are disabled. Query strings/fragments are excluded from that path and referrers are reduced to origin. The asynchronous SDK uses `referrerPolicy=origin`; `no-referrer` can cause Baidu to return an empty script. Project names, filenames, poses, actors, models, reference images and other user content are not actively reported. Baidu still processes the network/browser information and visitor identifiers needed for statistics.
+
+In Baidu **Visit analysis → Event analysis**, select category `export`, action `download`. Fixed `format/scope` labels are `images-zip/five`, `images-zip/current`, `glb-static/scene`, `glb-static/selected`, `glb-rigged/scene` and `glb-rigged/selected`. One image ZIP counts once regardless of rig or actor count. Only completed generation followed by download initiation counts; cancellations, failures, previews and project saves do not. The browser cannot confirm final disk persistence. Blocked analytics or network errors do not affect editing/export.
+
+Run `npm test -- web/src/siteAnalytics.test.ts` for host isolation, duplicate startup, sanitized URLs/referrers, bounded fields and the download completion boundary, then `npm run build:pages`. After deployment, verify a nonempty SDK and inspect the matching site's installation check and reports. New-site code and reports may lag; an inserted script alone does not prove data receipt.
+
+API reference: [Baidu pageview API](https://tongji.baidu.com/holmes/Tongji/%E7%BB%9F%E8%AE%A1%E5%BC%80%E6%94%BE%E6%89%8B%E5%86%8C/JS-API%E6%8A%80%E6%9C%AF%E6%96%87%E6%A1%A3/_trackPageview/).
+
 ## Automatic deployment
 
 Set repository Settings → Pages → Source to **GitHub Actions**. `.github/workflows/pages.yml` runs on `main` pushes or manual dispatch: locked dependency installation, setup tests, feature tests, Pages build, artifact upload and deployment. Only `dist/` is uploaded, with deployment-scoped Pages permissions.
