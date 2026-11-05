@@ -5,7 +5,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const projectRoot=fileURLToPath(new URL('../',import.meta.url));
-const imports=['appearance','appearance-settings','language-selector','dock','layout','i18n','locales','dock.css','motion.css','theme-tokens.css','appearance-settings.css','tabs.css','language-selector.css'];
+const imports=['appearance','appearance-settings','language-selector','header-controls','dock','layout','i18n','locales','dock.css','motion.css','theme-tokens.css','appearance-settings.css','tabs.css','language-selector.css','header-controls.css'];
 
 export function checkWorkbench(root=projectRoot){
   const fail=reason=>{throw new Error(`[PoseForge] 共享工作台依赖不可用：${reason}\n请停止开发服务，在 PoseForge 项目根目录执行 npm ci，再重新启动。\n复制源码时需保留 vendor/、package.json 和 package-lock.json；无需安装 MomoWorkbench 或 TextureForge 仓库。`);};
