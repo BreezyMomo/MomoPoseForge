@@ -1,7 +1,7 @@
 // PoseForge's public Baidu site ID. Only the official editor sends statistics.
 const SITE_ID='224b1fd988ecb72d0d8640b984083207';
 const SCRIPT_ID='momo-site-analytics';
-type AnalyticsWindow=Pick<Window,'location'>&{_hmt?:{push:(entry:unknown[])=>unknown}};
+type AnalyticsWindow=Pick<Window,'location'>&Partial<Pick<Window,'dispatchEvent'>>&{CustomEvent?:typeof CustomEvent;_hmt?:{push:(entry:unknown[])=>unknown}};
 export type ExportStats=
   |{format:'images-zip';scope:'five'|'current'}
   |{format:'glb-static'|'glb-rigged';scope:'scene'|'selected'};
@@ -37,8 +37,10 @@ export function startSiteAnalytics(win:AnalyticsWindow=window,doc:Document=docum
 
 export function trackCompletedExport(stats:ExportStats,win:AnalyticsWindow=window){
   try{
-    if(!analyticsTarget(win.location.href))return;
     const valid=stats?.format==='images-zip'?['five','current'].includes(stats.scope):['glb-static','glb-rigged'].includes(stats?.format)&&['scene','selected'].includes(stats.scope);
-    if(valid)win._hmt?.push(['_trackEvent','export','download',stats.format+'/'+stats.scope]);
+    if(!valid)return;
+    // A bounded local signal lets self-hosted deployments use their own tracker.
+    try{if(win.CustomEvent)win.dispatchEvent?.(new win.CustomEvent('momo:export-completed',{detail:{action:'download',format:stats.format,scope:stats.scope}}));}catch{}
+    if(analyticsTarget(win.location.href))win._hmt?.push(['_trackEvent','export','download',stats.format+'/'+stats.scope]);
   }catch{/* Statistics must not turn a completed download into an export failure. */}
 }

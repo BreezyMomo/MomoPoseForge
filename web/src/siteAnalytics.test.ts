@@ -49,6 +49,13 @@ describe('official-site analytics',()=>{
 });
 
 describe('download completion boundary',()=>{
+  it('self-hosted exports emit one sanitized local signal without loading Baidu',()=>{
+    const {win,doc,scripts}=environment('https://pose.breezymomo.com/'),dispatchEvent=vi.fn((_event:Event)=>true);Object.assign(win,{CustomEvent,dispatchEvent});
+    const detail={format:'images-zip' as const,scope:'five' as const,name:'PRIVATE',pose:'PRIVATE'};
+    expect(startSiteAnalytics(win,doc)).toBe(false);trackCompletedExport(detail,win);
+    expect(dispatchEvent).toHaveBeenCalledOnce();const event=dispatchEvent.mock.calls[0][0] as CustomEvent;expect(event).toMatchObject({type:'momo:export-completed',detail:{action:'download',format:'images-zip',scope:'five'}});
+    expect(JSON.stringify(event.detail)).not.toContain('PRIVATE');expect(scripts).toHaveLength(0);expect(win._hmt).toBeUndefined();
+  });
   it('counts one download after initiation; project saves and failed initiation do not count',()=>{
     vi.useFakeTimers();const {win,doc,click}=environment();startSiteAnalytics(win,doc);vi.stubGlobal('window',win);vi.stubGlobal('document',doc);
     vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:test');vi.spyOn(URL,'revokeObjectURL').mockImplementation(()=>{});
