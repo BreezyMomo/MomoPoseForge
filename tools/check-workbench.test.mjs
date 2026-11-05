@@ -16,7 +16,7 @@ function fixture(t){
   put('vendor/workbench.tgz',archive);
   put('package-lock.json',{packages:{'node_modules/@momo/workbench':{version:'0.2.0',resolved:dependency,integrity:`sha512-${createHash('sha512').update(archive).digest('base64')}`}}});
   const installed={name:'@momo/workbench',version:'0.2.0',exports:{}};
-  for(const name of ['appearance','appearance-settings','language-selector','header-controls','dock','layout','i18n','locales','dock.css','motion.css','theme-tokens.css','appearance-settings.css','tabs.css','language-selector.css','header-controls.css']){
+  for(const name of ['appearance','react','dock','layout','i18n','locales','dock.css','motion.css','theme-tokens.css','react.css','tabs.css','header-controls.css']){
     installed.exports[`./${name}`]=name.endsWith('.css')?`./src/${name}`:{types:`./src/${name}.d.ts`,default:`./src/${name}.js`};
     put(`node_modules/@momo/workbench/src/${name}${name.endsWith('.css')?'':'.js'}`,'');
     if(!name.endsWith('.css'))put(`node_modules/@momo/workbench/src/${name}.d.ts`,'');

@@ -1,15 +1,15 @@
 import {useLayoutEffect,useMemo,useRef,type ReactNode,type RefObject} from 'react';
 import {createPortal} from 'react-dom';
 import {createDockWorkspace,type DockWorkspace} from '@momo/workbench/dock';
+import {mountDockMenu} from '@momo/workbench/react';
 import {createPoseLayout,POSE_WORKBENCH_PANELS,POSE_WORKBENCH_KEY} from './workbenchLayout';
-import {t,language} from './workbenchState';
+import {t,language,appearance} from './workbenchState';
 import '@momo/workbench/dock.css';
 import '@momo/workbench/motion.css';
 import '@momo/workbench/theme-tokens.css';
 import './workbench.css';
-import '@momo/workbench/appearance-settings.css';
+import '@momo/workbench/react.css';
 import '@momo/workbench/tabs.css';
-import '@momo/workbench/language-selector.css';
 
 type PanelId=typeof POSE_WORKBENCH_PANELS[number]['id'];
 export function WorkbenchShell({panels,menuHost,managerRef,onMessage}:{panels:Record<PanelId,ReactNode>;menuHost:RefObject<HTMLDivElement|null>;managerRef:RefObject<DockWorkspace|null>;onMessage:(message:string)=>void}){
@@ -19,7 +19,7 @@ export function WorkbenchShell({panels,menuHost,managerRef,onMessage}:{panels:Re
     if(!host.current||!menuHost.current)return;
     const compact=window.matchMedia('(max-width:900px)').matches;
     const manager=createDockWorkspace({
-      host:host.current,menuHost:menuHost.current,panels:containers,model:createPoseLayout(compact),storageKey:POSE_WORKBENCH_KEY+(compact?':compact':''),
+      host:host.current,menuHost:menuHost.current,panels:containers,model:createPoseLayout(compact),renderMenu:options=>mountDockMenu({...options,appearance,language}),storageKey:POSE_WORKBENCH_KEY+(compact?':compact':''),
       ui:{text:t,format:(key:string,...values:unknown[])=>t(key,...values),onLanguageChange:language.onLanguageChange},
       menuPresets:[{id:'default',title:'layout.restoreDefaultLayout'},{id:'focus',title:'layout.focusCanvas'},{id:'inspect',title:'pose.layout.inspect'}],
       onMessage:(value:string)=>message.current(value),
